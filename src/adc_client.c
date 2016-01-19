@@ -26,7 +26,7 @@ uint16_t adc_port;
 char *adc_ip4_address; 
 static void *recv_buf;
 static int sock = -1;
-static uint16_t pcount;
+//static uint16_t pcount;
 
 static struct sockaddr_in
 	local, remote;
@@ -41,7 +41,7 @@ int adc_client_init()
 	recv_buf = malloc(RECV_BUF_SIZE);
 
 	sock = socket(
-			AF_INET6,
+			AF_INET,
 			SOCK_DGRAM, 0);
 	if (sock == -1) {
 		emd_log(LOG_DEBUG, "Error to open socket: %s", strerror(errno));

@@ -10,6 +10,7 @@
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 #include <uv.h>		// for uv_mutex_t
+#include <sched.h>
 
 #include "emd.h"
 #include "sv_read.h"
@@ -205,6 +206,10 @@ int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, char *dst_mac2, char 
 	srun();
 #else
 	uv_thread_create(&thread, run, NULL);
+	int ret;
+	if ((ret = pthread_setschedprio(thread, sched_get_priority_max(sched_getscheduler(thread)))) != 0) {
+		emd_log(LOG_ERR, "pthread_setschedprio() failed: %d", ret);
+	}
 #endif
 	return 0;
 }
@@ -381,7 +386,7 @@ int parse_tlv(const u_char *p, int *size)
 	}
 	switch (tag) {
 		case T_SAV_PDU:
-			break;	//return parse_tlv(p, size); 
+			break;
 		case T_NO_ASDU:
 			if (pdu->no_asdu == 0) {
 				pdu->no_asdu = *p;
@@ -403,7 +408,7 @@ int parse_tlv(const u_char *p, int *size)
 			break;
 		case T_SEQ_ASDU:
 			pdu->cur_asdu = -1;
-			break;	// return parse_tlv(p, size); 
+			break;
 		case T_ASDU:
 			pdu->cur_asdu++;
 			return parse_tlv(p, size); 

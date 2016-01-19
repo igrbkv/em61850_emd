@@ -12,8 +12,8 @@
 #define DEFAULT_BACKLOG 128
 
 typedef struct {
-	  uv_write_t req;
-	    uv_buf_t buf;
+	uv_write_t req;
+	uv_buf_t buf;
 } write_req_t;
 
 static void on_close(uv_handle_t* handle);
@@ -55,7 +55,7 @@ void on_write(uv_write_t* req, int status)
 		return;
 
 	if (status != UV_EPIPE) {
-		emd_log(LOG_ERR, "fatal error! exit.");
+		emd_log(LOG_ERR, "write fatal error! exit.");
 		exit(EXIT_FAILURE);
 	}
 
@@ -87,11 +87,24 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 		req = (uv_shutdown_t*) malloc(sizeof(*req));
 		uv_shutdown(req, stream, on_shutdown);
 	} else if (nread > 0) {
-		//emd_log(LOG_ERR, "Ошибка разбора пакета");
-		
-		wr = (write_req_t*) malloc(sizeof(*wr));
-		wr->buf = uv_buf_init(buf->base, nread);
-		uv_write(&wr->req, stream, &wr->buf, 1, on_write);
+		ssize_t offset = 0;
+		while (offset < nread) {
+			char *out_buf = NULL;
+			int out_buf_len;
+			ssize_t ret;
+
+			if ((ret = parse_request(&buf->base[offset], nread -offset,
+				&out_buf, &out_buf_len)) == -1) {
+				emd_log(LOG_ERR, "Unable to parse input message.");
+				return;
+			}
+			
+			wr = (write_req_t*) malloc(sizeof(*wr));
+			wr->buf = uv_buf_init(out_buf,out_buf_len);
+			uv_write(&wr->req, stream, &wr->buf, 1, on_write);
+
+			offset += ret;
+		}
 	}
 	if (buf->base) {
 #ifdef DEBUG

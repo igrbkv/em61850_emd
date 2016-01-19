@@ -244,7 +244,7 @@ double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb)
 void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir) 
 {
 	unsigned int k, p;
-	unsigned int Esize;
+	unsigned int esize;
 	unsigned int ne, nn;
 	double pp, arg, pn, bk, bk1;
 
@@ -254,9 +254,9 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
 
     pp = log(4 * num_samples - 1.) / log(2.);
     p = floor(pp);
-    Esize = 2 << (p-1);
+    esize = 2 << (p-1);
 
-    ne = Esize << 1;
+    ne = esize << 1;
 
 	b = calloc(ne, sizeof(double)); 
 	bb = calloc(ne, sizeof(double)); 
@@ -283,15 +283,15 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
 	}
 
     for(k = 2; k < nn; k += 2) {
-		p = 2 * Esize - k;
+		p = 2 * esize - k;
         *(b + p + 1) = *(b + k + 1);
         *(b + p) = *(b + k);
 	}
 
 	memcpy(bb, b, sizeof(double)*ne);
 	
-    dfour1(vvv, Esize, 1);
-    dfour1(b, Esize, 1);
+    dfour1(vvv, esize, 1);
+    dfour1(b, esize, 1);
 
 	for(k = 0; k < ne; k += 2) {
         pp = vvv[k] * b[k] - vvv[k + 1] * b[k + 1];
@@ -299,7 +299,7 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
         vvv[k] = pp;
 	}
 
-    dfour1(vvv, Esize, -1);
+    dfour1(vvv, esize, -1);
 
 	for(k = 0; k < 2*num_samples; k += 2) {
         out_v[k]  = (vvv[k] * bb[k] + vvv[k+1] * bb[k+1]);
