@@ -1,14 +1,20 @@
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <stdint.h>
 #include <string.h>
 #include <pcap.h>
 #include <errno.h>
+#include <netinet/in.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
+#include <net/if.h> //ifreq
+#include <netinet/if_ether.h> /* includes net/ethernet.h */
 #include <uv.h>		// for uv_mutex_t
 #include <sched.h>
 
@@ -96,6 +102,9 @@ struct _sv_header {
 } __attribute__ ((__packed__));
 typedef struct _sv_header sv_header;
 
+char emd_mac[17];	
+static char ifname[IF_NAMESIZE];
+
 static sv_data_second *ready;
 static sv_data_second *cur;
 static statistic *st;
@@ -132,6 +141,55 @@ static void print_statistic(bool finish);
 
 int sv_read_init()
 {
+	emd_mac[0] = '\0';
+	ifname[0] = '\0';
+	pcap_if_t *alldevs;
+	pcap_findalldevs(&alldevs, errbuf);
+
+	for (pcap_if_t *d = alldevs; d; d = d->next) {
+		if (d->flags & PCAP_IF_LOOPBACK)
+			continue;
+		else if (d->addresses) {
+			// вешаемся на первый попавшийся интерфейс
+			strncpy(ifname, d->name, IF_NAMESIZE-1);
+			break;		
+		}
+	}
+	pcap_freealldevs(alldevs);
+
+	if (ifname[0] == '\0') {
+		emd_log(LOG_DEBUG, "pcap did not find iface device");
+		return -1;
+	} else {
+		int fd;
+		struct ifreq ifr;
+
+		memset(&ifr, 0, sizeof(ifr));
+		if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+			emd_log(LOG_DEBUG, "socket() failed: %s", strerror(errno));
+			ifname[0] ='\0';
+			return -1;
+		}
+		ifr.ifr_addr.sa_family = AF_INET;
+		strncpy(ifr.ifr_name , ifname , IF_NAMESIZE-1);
+		if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
+			emd_log(LOG_DEBUG, "ioctl() failed: %s", strerror(errno));
+			ifname[0] = '\0';
+			close(fd);
+			return -1;
+		} else {
+			sprintf(emd_mac, "%.2X:%.2X:%.2X:%.2X:%.2X:%.2X",
+				ifr.ifr_hwaddr.sa_data[0],
+				ifr.ifr_hwaddr.sa_data[1],
+				ifr.ifr_hwaddr.sa_data[2],
+				ifr.ifr_hwaddr.sa_data[3],
+				ifr.ifr_hwaddr.sa_data[4],
+				ifr.ifr_hwaddr.sa_data[5]);
+		}
+
+		close(fd);
+	}
+
 	ready =(sv_data_second *)calloc(2*2, sizeof(sv_data_second));
 	memset(ready, 0, sizeof(sv_data_second)*2*2);
 	cur = (sv_data_second *)calloc(2, sizeof(sv_data_second));
@@ -173,6 +231,8 @@ int sv_read_close()
 #ifndef LOCAL_DEBUG
 	uv_mutex_destroy(&mutex);
 #endif
+
+	ifname[0] = '\0';
 	return 0;
 }
 
@@ -236,26 +296,7 @@ int srun()
 {
 	int ret = -1;
 
-	char *ifname = NULL;
 	char *filter = NULL;
-	pcap_if_t *alldevs;
-	pcap_findalldevs(&alldevs, errbuf);
-
-	for (pcap_if_t *d = alldevs; d; d = d->next) {
-		if (d->flags & PCAP_IF_LOOPBACK)
-			continue;
-		else if (d->addresses) {
-			// вешаемся на первый попавшийся интерфейс
-			ifname = strdup(d->name);
-			break;		
-		}
-	}
-	pcap_freealldevs(alldevs);
-
-	if (ifname == NULL) {
-		emd_log(LOG_DEBUG, "pcap did not find iface device");
-		goto err;
-	}
 
 	struct bpf_program fp;
     descr = pcap_open_live(ifname, BUFSIZ, 1, -1, errbuf); 
@@ -311,7 +352,6 @@ int srun()
 
 	ret = 0;
 err:
-	free(ifname);
 	free(filter);
 	pcap_close(descr);
 	descr = NULL;

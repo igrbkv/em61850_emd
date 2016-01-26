@@ -7,9 +7,7 @@ extern int emd_debug;
 extern const char *progname;
 
 #define EMD_CONFPATH "/etc/opt/marsenergo"
-#define EMD_PORT 5025
 extern const char *emd_confpath;
-extern unsigned short emd_port;
 
 extern void clean_exit_with_status(int status);
 

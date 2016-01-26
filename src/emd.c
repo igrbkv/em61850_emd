@@ -24,6 +24,7 @@
 #include "adc_client.h"
 #include "sv_read.h"
 #include "log.h"
+#include "settings.h"
 
 #define EMD_CONFFILE EMD_CONFPATH "/emd.conf"
 #define EMD_PIDFILE "/var/run/emd.pid" 
@@ -41,9 +42,8 @@ int check_conf();
 
 const char *progname;
 const char *emd_confpath = EMD_CONFPATH;
-unsigned short emd_port = EMD_PORT;
-static char *conffile;
 static const char *pidfile = EMD_PIDFILE; 
+static char *conffile;
 
 uv_loop_t *loop = NULL;
 
@@ -109,7 +109,7 @@ static void default_init()
     foreground = 0;
 	emd_debug = 0;
 
-	emd_port = EMD_PORT;
+	set_default_settings();
 }
 
 static void open_log(void)
@@ -257,75 +257,7 @@ static int handle_cmdline(int *argc, char ***argv)
 	return 0;
 }
 
-int emd_read_conf(const char *file)
-{
-	FILE *fp;
-	char buf[512];
-	int line = 0;
 
-	emd_log(LOG_DEBUG, "parsing conf file %s", file);
-
-    /* r - read-only */
-	fp = fopen(file, "r");
-	if (!fp) {
-		emd_log(LOG_ERR, "fopen(%s): %s", file, strerror(errno));
-		return -1;
-	}
-
-	/* read each line */
-	while (!feof(fp) && !ferror(fp)) {
-		char *p = buf;	//, *_p;
-		char key[64];
-		char val[512];
-		int n;
-
-		line++;
-		memset(key, 0, sizeof(key));
-		memset(val, 0, sizeof(val));
-
-		if (fgets(buf, sizeof(buf)-1, fp) == NULL) {
-			continue;
-		}
-
-		/* skip leading whitespace */
-		while (*p && isspace((int)*p)) {
-			p++;
-		}
-		/* blank lines and comments get ignored */
-		if (!*p || *p == '#') {
-			continue;
-		}
-
-		/* quick parse */
-		n = sscanf(p, "%63[^=\n]=%255[^\n]", key, val);
-		if (n != 2) {
-			emd_log(LOG_WARNING, "can't parse %s at line %d",
-			    file, line);
-			continue;
-		}
-		if (emd_debug >= 3) {
-			emd_log(LOG_DEBUG, "    key=\"%s\" val=\"%s\"",
-			    key, val);
-		}
-		/* handle the parsed line */
-		if (!strcasecmp(key, "debug")) {
-			emd_debug = atoi(val);
-		} else if (!strcasecmp(key, "foreground")) {
-			foreground = atoi(val);
-		} else if (!strcasecmp(key, "port")) {
-			emd_port = atoi(val);
-		} else {
-			emd_log(LOG_WARNING,
-			    "unknown option '%s' in %s at line %d",
-			    key, file, line);
-			continue;
-		}
-	}	
-
-	fclose(fp);
-
-	return 0;
-}
 
 int create_pidfile()
 {

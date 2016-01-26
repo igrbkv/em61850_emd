@@ -6,6 +6,8 @@
 
 #include "emd.h"
 #include "log.h"
+#include "server.h"
+#include "settings.h"
 
 #include "debug.h"
 
@@ -94,7 +96,7 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 			ssize_t ret;
 
 			if ((ret = parse_request(&buf->base[offset], nread -offset,
-				&out_buf, &out_buf_len)) == -1) {
+				(void **)&out_buf, &out_buf_len)) == -1) {
 				emd_log(LOG_ERR, "Unable to parse input message.");
 				return;
 			}
