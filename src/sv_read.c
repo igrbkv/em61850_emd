@@ -178,13 +178,13 @@ int sv_read_init()
 			close(fd);
 			return -1;
 		} else {
-			sprintf(emd_mac, "%.2X:%.2X:%.2X:%.2X:%.2X:%.2X",
-				ifr.ifr_hwaddr.sa_data[0],
-				ifr.ifr_hwaddr.sa_data[1],
-				ifr.ifr_hwaddr.sa_data[2],
-				ifr.ifr_hwaddr.sa_data[3],
-				ifr.ifr_hwaddr.sa_data[4],
-				ifr.ifr_hwaddr.sa_data[5]);
+			sprintf(emd_mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+				(uint8_t)ifr.ifr_hwaddr.sa_data[0],
+				(uint8_t)ifr.ifr_hwaddr.sa_data[1],
+				(uint8_t)ifr.ifr_hwaddr.sa_data[2],
+				(uint8_t)ifr.ifr_hwaddr.sa_data[3],
+				(uint8_t)ifr.ifr_hwaddr.sa_data[4],
+				(uint8_t)ifr.ifr_hwaddr.sa_data[5]);
 		}
 
 		close(fd);

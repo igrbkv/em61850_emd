@@ -8,6 +8,7 @@ extern const char *progname;
 
 #define EMD_CONFPATH "/etc/opt/marsenergo"
 extern const char *emd_confpath;
+extern char *conffile;
 
 extern void clean_exit_with_status(int status);
 

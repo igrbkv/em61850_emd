@@ -43,7 +43,7 @@ int check_conf();
 const char *progname;
 const char *emd_confpath = EMD_CONFPATH;
 static const char *pidfile = EMD_PIDFILE; 
-static char *conffile;
+char *conffile;
 
 uv_loop_t *loop = NULL;
 

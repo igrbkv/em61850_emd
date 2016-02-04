@@ -149,6 +149,7 @@ int set_adc_prop(struct adc_properties *prop)
 	char req[16];
 	char resp[256];
 	char tag;
+	char buf[32];
 		
 	// write ranges
 	for (int i = 0; i < 8; i++) {
@@ -169,7 +170,9 @@ int set_adc_prop(struct adc_properties *prop)
 	// write macs
 	if (memcmp(adc_prop.dst_mac, prop->dst_mac, 17) != 0) {
 		req[0] = 0;
-		sscanf(prop->dst_mac, "%x:%x:%x:%x:%x:%x",
+		memcpy(buf, prop->dst_mac, 17);
+		buf[17] = '\0';
+		sscanf(buf, "%x:%x:%x:%x:%x:%x",
 			&req[1], &req[2], &req[3], 
 			&req[4], &req[5], &req[6]);
 		if ((ret = adc_send_recv(0xb4, req, 7, &tag, resp, sizeof(resp))) == -1)
@@ -181,7 +184,9 @@ int set_adc_prop(struct adc_properties *prop)
 	}
 	if (memcmp(adc_prop.src_mac, prop->src_mac, 17) != 0) {
 		req[0] = 0;
-		sscanf(prop->src_mac, "%x:%x:%x:%x:%x:%x",
+		memcpy(buf, prop->src_mac, 17);
+		buf[17] = '\0';
+		sscanf(buf, "%x:%x:%x:%x:%x:%x",
 			&req[1], &req[2], &req[3], 
 			&req[4], &req[5], &req[6]);
 		if ((ret = adc_send_recv(0xba, req, 7, &tag, resp, sizeof(resp))) == -1)
@@ -297,19 +302,22 @@ int read_properties()
 
 	// read macs
 	req[0] = 0;
-	if ((ret = adc_send_recv(0xb5, req, 1, &tag, resp, sizeof(resp))) == -1)
-		return -1;
-	if (tag == 0x32 && ret == 6)
-		memcpy(adc_prop.dst_mac, resp, 6);
-	else
-		goto err;
-
 	if ((ret = adc_send_recv(0xbb, req, 1, &tag, resp, sizeof(resp))) == -1)
 		return -1;
 	if (tag == 0x32 && ret == 6)
-		memcpy(adc_prop.src_mac, resp, 6);
+		sprintf(adc_prop.src_mac, "%02X:%02X:%02X:%02X:%02X:%02X", 
+			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
 	else
 		goto err;
+
+	if ((ret = adc_send_recv(0xb5, req, 1, &tag, resp, sizeof(resp))) == -1)
+		return -1;
+	if (tag == 0x32 && ret == 6)
+		sprintf(adc_prop.dst_mac, "%02X:%02X:%02X:%02X:%02X:%02X", 
+			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
+	else
+		goto err;
+
 
 	// sv_id
 	if ((ret = adc_send_recv(0xb9, req, 1, &tag, resp, sizeof(resp))) == -1)

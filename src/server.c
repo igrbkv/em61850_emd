@@ -9,61 +9,9 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "adc_client.h"
-
-/* Протокол обмена.
- * 1. Формат пакета:
- *		1 байт - код сообщения
- *		2 байта (unsigned short) - длина данных
- *		<длина_данных> байт - данные
- * 
- *		Коды 0-127, запрос и ответ, если ошибка,
- *		то первый бит кода ответа выставить в 1, а
- *		в длину данных записать код ошибки.
- */
+#include "proto.h"
 
 #define MAX_DIFF_TIME 2
-
-enum REQ_CODES {
-	STATE_REQ = 1,
-	GET_MAC_REQ,
-	GET_ADC_PROP_REQ,
-	SET_ADC_PROP_REQ,
-	GET_STREAMS_PROP_REQ,
-	SET_STREAMS_PROP_REQ,
-};
-
-enum ERR_CODES {
-	NOT_AVAILABLE
-};
-
-typedef struct __attribute__((__packed__)) pdu {
-	int8_t msg_code;
-	uint16_t data_len;
-	int8_t data[];
-} pdu_t;
-
-struct __attribute__((__packed__)) err_resp {
-	int8_t msg_code;
-	uint8_t err_code;
-};
-
-struct req {
-};
-
-struct state_req {
-	int32_t time;
-};
-
-struct state_resp {
-};
-
-struct __attribute__((__packed__)) mac_resp {
-	char mac[17];
-};
-
-typedef struct adc_properties adc_prop_resp;
-
-typedef struct streams_properties streams_prop_resp;
 
 
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
@@ -100,15 +48,32 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 	hdr->data_len = ntohs(hdr->data_len);
 
 	switch (hdr->msg_code) {
+		case SET_TIME_REQ: {
+			if (hdr->data_len != sizeof(struct set_time_req)) {
+				emd_log(LOG_DEBUG, "SET_TIME_REQ error data size!");
+				return -1;
+			}				
+
+			struct set_time_req *req = (struct set_time_req *)hdr->data;
+			apply_time(ntohl(req->time));
+			make_confirmation(hdr->msg_code, out, out_len);
+			break;
+		}
+
 		case STATE_REQ: {
-			if (hdr->data_len != sizeof(struct state_req)) {
+			if (hdr->data_len != 0) {
 				emd_log(LOG_DEBUG, "STATE_REQ error data size!");
 				return -1;
 			}				
 
-			struct state_req *req = (struct state_req *)hdr->data;
-			apply_time(ntohl(req->time));
-			make_confirmation(hdr->msg_code, out, out_len);
+			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(struct state_resp));
+			resp->msg_code = hdr->msg_code;
+			resp->data_len = htons(sizeof(struct state_resp));
+			struct state_resp *s = (struct state_resp *)resp->data;
+			// set current state
+			
+			*out = (void *)resp;
+			*out_len = sizeof(pdu_t) + sizeof(struct state_resp);
 			break;
 		}
 		case GET_MAC_REQ: {
@@ -167,7 +132,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			
 			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(streams_prop_resp));
 			resp->msg_code = hdr->msg_code;
-			resp->data_len = sizeof(streams_prop_resp);
+			resp->data_len = htons(sizeof(streams_prop_resp));
 			streams_prop_resp *data = (streams_prop_resp *)resp->data;
 
 			memcpy(data, &streams_prop, sizeof(streams_prop_resp));

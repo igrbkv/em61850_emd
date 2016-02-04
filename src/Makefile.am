@@ -10,7 +10,8 @@ emd_SOURCES = emd.c emd.h \
 	adc_tlv.h adc_tlv.c \
 	adc_client.h adc_client.c \
 	calc.h calc.c \
-	settings.h settings.c
+	settings.h settings.c \
+	proto.h
 
 AM_CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall
 #for debug: ./configure CFLAGS='-ggdb -O0'

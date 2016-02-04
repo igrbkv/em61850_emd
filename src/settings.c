@@ -7,24 +7,25 @@
 #include <unistd.h>
 #include <sys/types.h>
 
+#include "emd.h"
 #include "log.h"
 #include "settings.h"
 
 /* Настройки энергомонитора:
- * emd_external_stream1 = 0 - (по умолчанию) 
+ * external_stream1 = 0 - (по умолчанию) 
  *			используется ADC
- *						  1 - используется внешний 
+ *					  1 - используется внешний 
  *			поток 1
- *		emd_mac_external_stream1 - mac внешнего потока 1
- *		emd_sv_id_external_stream1 - sv_id внешнего 
+ *		mac_external_stream1 - mac внешнего потока 1
+ *		sv_id_external_stream1 - sv_id внешнего 
  *			потока 1
- * emd_external_stream2 = 0 - (по умолчанию) внешний 
+ * external_stream2 = 0 - (по умолчанию) внешний 
  *						поток 2 не используется
- *						  1 - внешний поток 2 
+ *					  1 - внешний поток 2 
  *			используется 
- *		emd_mac_external_stream2 - mac внешнего потока 2
- *		emd_sv_id_external_stream2 - sv_id внешнего потока 2
- * emd_X_trans_coef_streamN = 1 - по умолчанию
+ *		mac_external_stream2 - mac внешнего потока 2
+ *		sv_id_external_stream2 - sv_id внешнего потока 2
+ * X_trans_coef_streamN = 1 - по умолчанию
  */
 
 unsigned short emd_port;
@@ -111,11 +112,9 @@ int emd_read_conf(const char *file)
 			strncpy(streams_prop.sv_id2, val, SV_ID_MAX_LEN - 1);
 			streams_prop.sv_id2[SV_ID_MAX_LEN - 1] = '\0';
 		} else if (!strcasecmp(key, "mac_external_stream1")) {
-			strncpy(streams_prop.mac1, val, 17 - 1);
-			streams_prop.mac1[17 - 1] = '\0';
+			strncpy(streams_prop.mac1, val, 17);
 		} else if (!strcasecmp(key, "mac_external_stream2")) {
-			strncpy(streams_prop.mac2, val, 17 - 1);
-			streams_prop.mac2[17 - 1] = '\0';
+			strncpy(streams_prop.mac2, val, 17);
 		} else if (!strcasecmp(key, "u_trans_coef_stream1")) {
 			streams_prop.u_trans_coef1 = atoi(val);
 		} else if (!strcasecmp(key, "i_trans_coef_stream1")) {
@@ -140,8 +139,89 @@ int emd_read_conf(const char *file)
 int set_streams_prop(struct streams_properties *prop)
 {
 	if (streams_prop.stream1 != prop->stream1) {
-		
+		char *val;
+		if (prop->stream1 == 0)
+			val = NULL;
+		else
+			val = "1";
+		if (emd_update_parameter(conffile, "emd_external_stream1", val, "=") == -1)
+			return -1;
+		streams_prop.stream1 = prop->stream1;
 	}
+
+	if (strncmp(streams_prop.mac1, prop->mac1, 17) != 0 ) {
+
+		char buf[32] = {0};
+		memcpy(buf, prop->mac1, 17);
+		if  (emd_update_parameter(conffile, "mac_external_stream1", buf[0]? buf: NULL, "=") == -1)
+			return -1;
+		memcpy(streams_prop.mac1, prop->mac1, 17);
+	}
+
+	if (strncmp(streams_prop.sv_id1, prop->sv_id1, SV_ID_MAX_LEN) != 0) {
+		if (emd_update_parameter(conffile, "sv_id_external_stream1", prop->sv_id1[0]? prop->sv_id1: NULL, "=") == -1)
+			return -1;
+		strncpy(streams_prop.sv_id1, prop->sv_id1, SV_ID_MAX_LEN);
+	}
+	
+	if (streams_prop.u_trans_coef1 != prop->u_trans_coef1) {
+		char buf[32] = {0};
+		snprintf(buf, sizeof(buf)-1, "%d", prop->u_trans_coef1);
+		if (emd_update_parameter(conffile, "u_trans_coef_stream1", prop->u_trans_coef1 == 1? NULL: buf, "=") == -1)
+			return -1;
+		streams_prop.u_trans_coef1 = prop->u_trans_coef1;
+	}
+	if (streams_prop.i_trans_coef1 != prop->i_trans_coef1) {
+		char buf[32] = {0};
+		snprintf(buf, sizeof(buf)-1, "%d", prop->i_trans_coef1);
+		if (emd_update_parameter(conffile, "i_trans_coef_stream1", prop->i_trans_coef1 == 1? NULL: buf, "=") == -1)
+			return -1;
+		streams_prop.i_trans_coef1 = prop->i_trans_coef1;
+	}
+
+
+	if (streams_prop.stream2 != prop->stream2) {
+		char *val;
+		if (prop->stream2 == 0)
+			val = NULL;
+		else
+			val = "1";
+		if (emd_update_parameter(conffile, "emd_external_stream2", val, "=") == -1)
+			return -1;
+		streams_prop.stream2 = prop->stream2;
+	}
+
+	if (strncmp(streams_prop.mac2, prop->mac2, 17) != 0 ) {
+
+		char buf[32] = {0};
+		memcpy(buf, prop->mac2, 17);
+		if  (emd_update_parameter(conffile, "mac_external_stream2", buf[0]? buf: NULL, "=") == -1)
+			return -1;
+		memcpy(streams_prop.mac2, prop->mac2, 17);
+	}
+
+	if (strncmp(streams_prop.sv_id2, prop->sv_id2, SV_ID_MAX_LEN) != 0) {
+		if (emd_update_parameter(conffile, "sv_id_external_stream2", prop->sv_id2[0]? prop->sv_id2: NULL, "=") == -1)
+			return -1;
+		strncpy(streams_prop.sv_id2, prop->sv_id2, SV_ID_MAX_LEN);
+	}
+	if (streams_prop.u_trans_coef2 != prop->u_trans_coef2) {
+		char buf[32] = {0};
+		snprintf(buf, sizeof(buf)-1, "%d", prop->u_trans_coef2);
+		if (emd_update_parameter(conffile, "u_trans_coef_stream2", prop->u_trans_coef2 == 1? NULL: buf, "=") == -1)
+			return -1;
+		streams_prop.u_trans_coef2 = prop->u_trans_coef2;
+	}
+	if (streams_prop.i_trans_coef2 != prop->i_trans_coef2) {
+		char buf[32] = {0};
+		snprintf(buf, sizeof(buf)-1, "%d", prop->i_trans_coef2);
+		if (emd_update_parameter(conffile, "i_trans_coef_stream2", prop->i_trans_coef2 == 1? NULL: buf, "=") == -1)
+			return -1;
+		streams_prop.i_trans_coef2 = prop->i_trans_coef2;
+	}
+
+
+	return 0;
 }
 
 #define USE_TMP_FILE
