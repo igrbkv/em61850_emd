@@ -2,6 +2,14 @@
 #include <string.h>
 #include <math.h>
 
+#include "proto.h"
+#include "sv_read.h"
+#include "debug.h"
+
+#ifdef DEBUG
+#include <stdio.h>
+#endif
+
 const unsigned int EQ_TRAILS = 0; // На сколько уменьшать длину вектора данных чтобы учесть работу эквалайзера
 
 double Kf = 1.0;
@@ -12,6 +20,108 @@ static double calc_abs_phi(const double *data_complex, double t_samp, int i, int
 static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp); 
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
 static void dfour1(double data[], unsigned int nn2, int isign);
+
+// @param  - uab
+// @return - size of data(sizeof(struct u_ab) + sizeof(values))
+int make_u_ab(struct u_ab **uab)
+{
+	int len;
+	struct timeval ts;
+	sv_data *s1;
+	int s1_size;
+
+	sv_get_ready(&ts, &s1, &s1_size, NULL, NULL);
+
+	if (s1_size == 0)
+		return 0;
+
+	len = sizeof(struct u_ab);
+	*uab = malloc(len);
+	(*uab)->ts = ts;
+
+#ifdef DEBUG
+	FILE *fp = fopen("dump_uab", "a");
+#endif
+
+	double rms_a = 0., rms_b = 0.;
+	for (int i = 0; i < s1_size; i++) {
+		rms_a += ((double)s1[i].ua) * ((double)s1[i].ua);  
+		rms_b += (double)s1[i].ub * (double)s1[i].ub;  
+#ifdef DEBUG
+		fprintf(fp, "%d: %d, %d\n", i, s1[i].ua, s1[i].ub);
+#endif
+	}
+
+	(*uab)->rms_ua =  sqrt(rms_a/s1_size);
+	(*uab)->rms_ub =  sqrt(rms_b/s1_size);
+
+#ifdef DEBUG
+	fprintf(fp, "#############################\n");
+	fclose(fp);
+#endif
+
+	return len; 
+}
+
+// @param  - ua_ua
+// @return - size of data(sizeof(struct ua_ua) + sizeof(values))
+int make_ua_ua(struct ua_ua **uaua)
+{
+	int len;
+	struct timeval ts;
+	sv_data *s1, *s2;
+	int s1_size, s2_size;
+
+	sv_get_ready(&ts, &s1, &s1_size, &s2, &s2_size);
+
+	if (s1_size == 0 && s2_size == 0)
+		return 0;
+	
+	(*uaua)->flags = 0x0;
+	if (s1_size)
+		(*uaua)->flags |= STREAM1_OK;
+	if (s2_size)
+		(*uaua)->flags |= STREAM2_OK;
+
+	len = sizeof(struct ua_ua);
+	*uaua = malloc(len);
+	(*uaua)->ts = ts;
+
+#ifdef DEBUG
+	FILE *fp = fopen("dump_ua_ua", "a");
+#endif
+
+#ifdef DEBUG
+	fprintf(fp, "111111111111111111111111\n");
+#endif
+	double rms = 0.;
+	for (int i = 0; i < s1_size; i++) {
+		rms += (double)s1[i].ua * (double)s1[i].ua;
+#ifdef DEBUG
+	fprintf(fp, "%d: %d\n", i, s1[i].ua);
+#endif
+	}
+
+	(*uaua)->rms_ua1 =  sqrt(rms/s1_size);
+#ifdef DEBUG
+	fprintf(fp, "222222222222222222222222\n");
+#endif
+	rms = 0.;
+	for (int i = 0; i < s2_size; i++) {
+		rms += (double)s2[i].ua * (double)s2[i].ua;
+#ifdef DEBUG
+	fprintf(fp, "%d: %d\n", i, s2[i].ua);
+#endif
+	}
+
+	(*uaua)->rms_ua2 =  sqrt(rms/s2_size);
+
+#ifdef DEBUG
+	fclose(fp);
+#endif
+
+	return len; 
+}
 
 void do_calculations(double *data, int len,  double *data_complex) 
 {

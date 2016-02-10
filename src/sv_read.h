@@ -31,8 +31,10 @@ struct timeval;
 
 int sv_read_init();
 int sv_read_close();
-int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, char *dst_mac2, char *src_mac2, char *sv_id2);
+int read_start();
 int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_data **stream2, int *stream2_size);
+
+void stream_states(int *s1, int *s2);
 
 extern char emd_mac[17];
 #endif

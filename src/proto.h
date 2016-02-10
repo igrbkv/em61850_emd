@@ -2,6 +2,7 @@
 #define PROTO_H_
 
 #include <stdint.h>
+#include <sys/time.h>
 
 /* Протокол обмена.
  * 1. Формат пакета:
@@ -24,6 +25,8 @@ enum REQ_CODES {
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
+	GET_U_AB_REQ,
+	GET_UA_UA_REQ,
 };
 
 enum ERR_CODES {
@@ -99,5 +102,22 @@ struct __attribute__((__packed__)) streams_properties {
 
 typedef struct streams_properties streams_prop_resp;
 
+struct __attribute__((__packed__)) u_ab {
+	struct timeval ts;
+	double rms_ua;
+	double rms_ub;
+	float values[];
+}; 
 
+typedef struct u_ab u_ab_resp;
+
+struct __attribute__((__packed__)) ua_ua {
+	struct timeval ts;
+	uint8_t flags;	// STREAM1_OK & STREAM2_OK
+	double rms_ua1;
+	double rms_ua2;
+	float values[];
+}; 
+
+typedef struct ua_ua ua_ua_resp;
 #endif

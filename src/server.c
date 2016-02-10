@@ -4,12 +4,14 @@
 #include <sys/time.h>
 #include <time.h>
 #include <string.h>
+#include <endian.h>
 
 #include "log.h"
 #include "sv_read.h"
 #include "settings.h"
 #include "adc_client.h"
 #include "proto.h"
+#include "calc.h"
 
 #define MAX_DIFF_TIME 2
 
@@ -71,7 +73,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			resp->data_len = htons(sizeof(struct state_resp));
 			struct state_resp *s = (struct state_resp *)resp->data;
 			// set current state
-			
+			int strm1, strm2;
+			stream_states(&strm1, &strm2);
+			s->streams_state = (strm1? STREAM1_OK: 0) | 
+				(strm2? STREAM2_OK: 0);
+
 			*out = (void *)resp;
 			*out_len = sizeof(pdu_t) + sizeof(struct state_resp);
 			break;
@@ -120,8 +126,10 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			adc_prop_resp *data = (adc_prop_resp *)hdr->data;
 			if (set_adc_prop(data) == -1)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
-			else
+			else {
 				make_confirmation(hdr->msg_code, out, out_len);
+				read_start();
+			}
 			break;
 		}
 		case GET_STREAMS_PROP_REQ: {
@@ -156,11 +164,59 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			data->i_trans_coef2 = ntohl(data->i_trans_coef2);
 			if (set_streams_prop(data) == -1)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
-			else
+			else {
 				make_confirmation(hdr->msg_code, out, out_len);
+				read_start();
+			}
 
 			break;
 		}
+		case GET_U_AB_REQ: {
+			if (hdr->data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_U_AB_REQ error data size!");
+				return -1;
+			}
+			u_ab_resp *uab;
+			int ret = make_u_ab(&uab);
+			if (ret == 0)
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			else {
+				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
+				resp->msg_code = hdr->msg_code;
+				resp->data_len = htons(ret);
+				u_ab_resp *data = (u_ab_resp *)resp->data;
+				*data = *uab;
+				free(uab);
+				data->rms_ua = htobe64(data->rms_ua);
+				data->rms_ub = htobe64(data->rms_ub);
+				*out = (void *)resp;
+				*out_len = sizeof(pdu_t) + ret;
+			}
+			break;
+		} 
+		case GET_UA_UA_REQ: {
+			if (hdr->data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_UA_UA_REQ error data size!");
+				return -1;
+			}
+			ua_ua_resp *uaua;
+			int ret = make_ua_ua(&uaua);
+			if (ret == 0)
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			else {
+				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
+				resp->msg_code = hdr->msg_code;
+				resp->data_len = htons(ret);
+				ua_ua_resp *data = (ua_ua_resp *)resp->data;
+				*data = *uaua;
+				free(uaua);
+				data->rms_ua1 = htobe64(data->rms_ua1);
+				data->rms_ua2 = htobe64(data->rms_ua2);
+				*out = (void *)resp;
+				*out_len = sizeof(pdu_t) + ret;
+			}
+			break;
+		} 
 	}
 
 	return sizeof(pdu_t) + hdr->data_len;;

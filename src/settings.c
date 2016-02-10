@@ -144,7 +144,7 @@ int set_streams_prop(struct streams_properties *prop)
 			val = NULL;
 		else
 			val = "1";
-		if (emd_update_parameter(conffile, "emd_external_stream1", val, "=") == -1)
+		if (emd_update_parameter(conffile, "external_stream1", val, "=") == -1)
 			return -1;
 		streams_prop.stream1 = prop->stream1;
 	}
@@ -186,7 +186,7 @@ int set_streams_prop(struct streams_properties *prop)
 			val = NULL;
 		else
 			val = "1";
-		if (emd_update_parameter(conffile, "emd_external_stream2", val, "=") == -1)
+		if (emd_update_parameter(conffile, "external_stream2", val, "=") == -1)
 			return -1;
 		streams_prop.stream2 = prop->stream2;
 	}

@@ -21,6 +21,8 @@
 #include "emd.h"
 #include "sv_read.h"
 #include "log.h"
+#include "settings.h"
+#include "adc_client.h"
 
 /* Алгоритм приема данных:
  * pdu => cur (second) => ready (2 seconds)
@@ -49,6 +51,7 @@
 #define	T_SMP_CNT 0x82
 #define	T_CONF_REV 0x83
 #define	T_SMP_SYNC 0x85
+#define	T_SMP_RATE 0x86
 #define	T_DATA 0x87
 
 typedef struct {
@@ -79,6 +82,7 @@ typedef struct {
 	struct timeval ts;
 	int no_asdu;
 	int cur_asdu;
+	uint16_t rate;
 	asdu asdus[ASDU_MAX];
 } sv_pdu;
 
@@ -115,6 +119,7 @@ static pcap_t *descr;
 static sv_pdu *pdu;
 static struct timeval timeout;
 static struct timeval err_threshold;
+static struct timeval stream1_alive_ts, stream2_alive_ts;
 
 #ifdef LOCAL_DEBUG
 static char *buffer;
@@ -125,8 +130,9 @@ static uv_mutex_t mutex;
 static uv_thread_t thread;
 #endif
 
+static int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, 
+	char *dst_mac2, char *src_mac2, char *sv_id2);
 static int time_equal(int i1, int i2);
-static uint16_t no_asdu_to_rate(int noAsdu);
 static void run(void *arg);
 static int srun();
 static void pcap_callback(u_char *useless, 
@@ -211,6 +217,9 @@ int sv_read_init()
 #else
 	uv_mutex_init(&mutex);
 #endif
+
+	read_start();
+
 	return 0;
 }
 
@@ -234,6 +243,43 @@ int sv_read_close()
 
 	ifname[0] = '\0';
 	return 0;
+}
+
+int read_start()
+{
+	char *dst_mac1 = NULL, *src_mac1 = NULL, *sv_id1 = NULL;
+	char *dst_mac2 = NULL, *src_mac2 = NULL, *sv_id2 = NULL;
+	char mac1_buf[17+1];
+	char mac2_buf[17+1];
+	
+	if (streams_prop.stream1 == 0) {
+		if (strncmp(adc_prop.dst_mac, emd_mac, 17) == 0) {
+			dst_mac1 = emd_mac;
+			strncpy(mac1_buf, adc_prop.src_mac, 17);
+			mac1_buf[sizeof(mac1_buf) - 1] = '\0';
+			src_mac1 = mac1_buf;
+			sv_id1 = adc_prop.sv_id;
+		} // else  {no data for local device}
+	} else {
+		dst_mac1 = emd_mac;
+		strncpy(mac1_buf, streams_prop.mac1, 17);
+		mac1_buf[sizeof(mac1_buf) - 1] = '\0';
+		src_mac1 = mac1_buf;
+		sv_id1 = streams_prop.sv_id1;
+	}
+
+	if (streams_prop.stream2 == 1) {
+		dst_mac2 = emd_mac;
+		strncpy(mac2_buf, streams_prop.mac2, 17);
+		mac2_buf[sizeof(mac2_buf) - 1] = '\0';
+		src_mac2 = mac2_buf;
+		sv_id2 = streams_prop.sv_id2;
+	}
+	
+	if (dst_mac1 == NULL && dst_mac2 == NULL)
+		return 0;
+
+	return sv_start(dst_mac1, src_mac1, sv_id1, dst_mac2, src_mac2, sv_id2);
 }
 
 int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, char *dst_mac2, char *src_mac2, char *sv_id2)
@@ -274,17 +320,25 @@ int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, char *dst_mac2, char 
 	return 0;
 }
 
-uint16_t no_asdu_to_rate(int noAsdu)
+// Возвращает состояния потоков
+// 0/1 - нет/есть
+// @s1 - поток1 
+// @s2 - поток2 
+void stream_states(int *s1, int *s2)
 {
-	switch (noAsdu) {
-		case 1:
-			return 80*50;
-		case 8:
-			return 256*50;
-		case 16:
-			return 512*50;
-	}
-	return 0;
+	struct timeval tv1, tv2;
+	uv_mutex_lock(&mutex);
+	tv1 = cur[0].ts;
+	tv2 = cur[2].ts;
+	uv_mutex_unlock(&mutex);
+	if (s1)
+		*s1 = (memcmp(&tv1, &stream1_alive_ts, sizeof(tv1)) != 0);
+
+	if (s2)
+		*s2 = (memcmp(&tv2, &stream2_alive_ts, sizeof(tv2)) != 0);
+
+	stream1_alive_ts = tv1;
+	stream2_alive_ts = tv2;
 }
 
 void run(void *arg)
@@ -319,21 +373,23 @@ int srun()
 	}
 	if (adr[0].src_mac) {
 		char *fil = NULL;
-		asprintf(&fil, "%s and ether dst %s",
+		asprintf(&fil, "%s and (ether src %s",
 			filter, adr[0].src_mac); 
 		free(filter);
 		filter = fil;
 	}
+#if 0
 	if (adr[1].dst_mac) {
 		char *fil = NULL;
-		asprintf(&fil, "%s and ether src %s",
+		asprintf(&fil, "%s and ether dst %s",
 			filter, adr[1].dst_mac); 
 		free(filter);
 		filter = fil;
 	}
+#endif
 	if (adr[1].src_mac) {
 		char *fil = NULL;
-		asprintf(&fil, "%s and ether src %s",
+		asprintf(&fil, "%s or ether src %s)",
 			filter, adr[1].src_mac); 
 		free(filter);
 		filter = fil;
@@ -457,6 +513,10 @@ int parse_tlv(const u_char *p, int *size)
 			break;
 		case T_CONF_REV:
 			break;
+		case T_SMP_RATE:
+			// FIXME smp_rate must be by second, not by period
+			pdu->rate = ntohs(*(u_int16_t *)p) * FREQUENCY;
+			break;
 		case T_SMP_SYNC:
 			pdu->asdus[pdu->cur_asdu].smp_sync = *p;
 			break;
@@ -478,9 +538,13 @@ int parse_tlv(const u_char *p, int *size)
 void pdu_to_cur()
 {
 	struct timeval tv;
-	u_int16_t rate = no_asdu_to_rate(pdu->no_asdu);
+	u_int16_t rate = pdu->rate;
 	timersub(&pdu->ts, &cur[idx].last_smp_ts, &tv);
 	
+#ifndef LOCAL_DEBUG
+	uv_mutex_lock(&mutex);
+#endif
+
 	// rate changed or timeout
 	if (rate != cur[idx].rate || tv.tv_sec < 0) {
 		memset(&cur[idx], 0, sizeof(sv_data_second));
@@ -508,6 +572,10 @@ void pdu_to_cur()
 		cur_to_ready();
 		cur[idx].smp_cnt = cur[idx].last_smp = 0;
 	}
+
+#ifndef LOCAL_DEBUG
+	uv_mutex_unlock(&mutex);
+#endif
 }
 
 void cur_to_ready()
@@ -520,9 +588,6 @@ void cur_to_ready()
 	// last sample time stamp => second time stamp
 	timersub(&cur[idx].last_smp_ts, &tv, &tv);
 
-#ifndef LOCAL_DEBUG
-	uv_mutex_lock(&mutex);
-#endif
 
 	if (timercmp(&ready[idx*2 + 0].ts, &tv, >))
 		// system time was corrected => clean data
@@ -531,10 +596,6 @@ void cur_to_ready()
 		memcpy(&ready[idx*2 + 1], &ready[idx*2 + 0], sizeof(sv_data_second));
 	memcpy(&ready[idx*2 + 0], &cur[idx], sizeof(sv_data_second));
 	ready[idx*2 + 0].ts = tv;
-
-#ifndef LOCAL_DEBUG
-	uv_mutex_unlock(&mutex);
-#endif
 }
 
 int time_equal(int i1, int i2)
@@ -555,8 +616,16 @@ int time_equal(int i1, int i2)
 int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_data **stream2, int *stream2_size)
 {
 	sv_data_second *s1, *s2;
-	s1 = stream1? malloc(sizeof(sv_data_second)): NULL;
-	s2 = stream2? malloc(sizeof(sv_data_second)): NULL;
+	sv_data *stm1, *stm2;
+
+	if (stream1) {
+		s1 = malloc(sizeof(sv_data_second));
+		s1->rate = 0;
+	} else s1 = NULL;
+	if (stream2) {
+		s2 = malloc(sizeof(sv_data_second));
+		s2->rate = 0;
+	} else s2 = NULL;
 	int i1 = -1, i2 = -1;
 
 #ifndef LOCAL_DEBUG
@@ -564,10 +633,8 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 #endif
 
 	if(stream1 && !stream2)
-		//memcpy(s1, &ready[0], sizeof(sv_data_second));
 		*s1 = ready[0];
 	else if (!stream1 && stream2)
-		//memcpy(s2, &ready[2], sizeof(sv_data_second));
 		*s2 = ready[2];
 	else if (stream1 && stream2) {
 		if (time_equal(0, 2)) {
@@ -580,9 +647,9 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 			i1 = 1; i2 = 3;
 		}
 		if (i1 != -1 && (ready[i1].ts.tv_sec || ready[i1].ts.tv_usec))
-				memcpy(s1, &ready[i1], sizeof(sv_data_second));
+			memcpy(s1, &ready[i1], sizeof(sv_data_second));
 		if (i2 != -1 && (ready[i2].ts.tv_sec || ready[i2].ts.tv_usec))
-				memcpy(s2, &ready[i2], sizeof(sv_data_second));
+			memcpy(s2, &ready[i2], sizeof(sv_data_second));
 	}
 
 #ifndef LOCAL_DEBUG 
@@ -593,31 +660,29 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 	if (stream1) {
 		if (s1->rate) {
 			*ts = s1->ts;
-			if (s1->rate != *stream1_size) {
-				*stream1 = realloc(*stream1, s1->rate * sizeof(sv_data));
-				*stream1_size = s1->rate;
-			}
+			stm1 = malloc(s1->rate * sizeof(*stm1));
+			*stream1_size = s1->rate;
 			for (int i = 0; i < s1->rate; i++)
-				(*stream1)[i] = s1->data[i];
+				stm1[i] = s1->data[i];
+			*stream1 = stm1;
 		}
 		else {
-			free(*stream1);
 			*stream1 = NULL;
-			stream1_size = 0;
+			*stream1_size = 0;
 		}
 	}
 	if (stream2) {
 		if (s2->rate) {
 			*ts = s2->ts;
-			if (s1->rate != *stream2_size)
-				stream2 = realloc(*stream2, s2->rate * sizeof(sv_data));
+			stm2 = malloc(s2->rate * sizeof(*stm2));
+			*stream2_size = s2->rate;
 			for (int i = 0; i < s2->rate; i++)
-				(*stream2)[i] = s1->data[i];
+				stm2[i] = s1->data[i];
+			*stream2 = stm2;
 		}
 		else {
-			free(stream2);
 			*stream2 = NULL;
-			stream2_size = 0;
+			*stream2_size = 0;
 		}
 	}
 	
