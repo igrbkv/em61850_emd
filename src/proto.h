@@ -105,7 +105,9 @@ typedef struct streams_properties streams_prop_resp;
 struct __attribute__((__packed__)) u_ab {
 	struct timeval ts;
 	double rms_ua;
+	double abs_phi_ua;
 	double rms_ub;
+	double abs_phi_ub;
 	float values[];
 }; 
 
@@ -115,7 +117,9 @@ struct __attribute__((__packed__)) ua_ua {
 	struct timeval ts;
 	uint8_t flags;	// STREAM1_OK & STREAM2_OK
 	double rms_ua1;
+	double abs_phi_ua1;
 	double rms_ua2;
+	double abs_phi_ua2;
 	float values[];
 }; 
 

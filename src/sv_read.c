@@ -66,13 +66,6 @@ typedef struct {
 } sv_data_second;
 
 typedef struct {
-	char *dst_mac;	
-	char *src_mac;
-	char *sv_id;
-	int sv_id_len;
-} sv_address;
-
-typedef struct {
 	u_int16_t smp_cnt;
 	u_char smp_sync;
 	sv_data data;
@@ -112,7 +105,7 @@ static char ifname[IF_NAMESIZE];
 static sv_data_second *ready;
 static sv_data_second *cur;
 static statistic *st;
-static sv_address *adr;
+static char *sv_id[2];
 static int idx;
 static char *errbuf;
 static pcap_t *descr;
@@ -130,11 +123,8 @@ static uv_mutex_t mutex;
 static uv_thread_t thread;
 #endif
 
-static int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, 
-	char *dst_mac2, char *src_mac2, char *sv_id2);
 static int time_equal(int i1, int i2);
 static void run(void *arg);
-static int srun();
 static void pcap_callback(u_char *useless, 
 	const struct pcap_pkthdr *pkthdr,
 	const u_char *packet);
@@ -202,8 +192,6 @@ int sv_read_init()
 	memset(cur, 0, sizeof(sv_data_second)*2);
 	st = (statistic *)malloc(sizeof(statistic));
 	memset(st, 0, sizeof(statistic));
-	adr = (sv_address *)calloc(2, sizeof(sv_address));
-	memset(adr, 0, sizeof(sv_address)*2);
 	pdu = (sv_pdu *)malloc(sizeof(sv_pdu)); 
 	errbuf = (char *)malloc(PCAP_ERRBUF_SIZE);
 	timeout.tv_sec = 0;
@@ -236,87 +224,11 @@ int sv_read_close()
 	free(pdu);
 	free(errbuf);
 	free(st);
-	free(adr);
 #ifndef LOCAL_DEBUG
 	uv_mutex_destroy(&mutex);
 #endif
 
 	ifname[0] = '\0';
-	return 0;
-}
-
-int read_start()
-{
-	char *dst_mac1 = NULL, *src_mac1 = NULL, *sv_id1 = NULL;
-	char *dst_mac2 = NULL, *src_mac2 = NULL, *sv_id2 = NULL;
-	char mac1_buf[17+1];
-	char mac2_buf[17+1];
-	
-	if (streams_prop.stream1 == 0) {
-		if (strncmp(adc_prop.dst_mac, emd_mac, 17) == 0) {
-			dst_mac1 = emd_mac;
-			strncpy(mac1_buf, adc_prop.src_mac, 17);
-			mac1_buf[sizeof(mac1_buf) - 1] = '\0';
-			src_mac1 = mac1_buf;
-			sv_id1 = adc_prop.sv_id;
-		} // else  {no data for local device}
-	} else {
-		dst_mac1 = emd_mac;
-		strncpy(mac1_buf, streams_prop.mac1, 17);
-		mac1_buf[sizeof(mac1_buf) - 1] = '\0';
-		src_mac1 = mac1_buf;
-		sv_id1 = streams_prop.sv_id1;
-	}
-
-	if (streams_prop.stream2 == 1) {
-		dst_mac2 = emd_mac;
-		strncpy(mac2_buf, streams_prop.mac2, 17);
-		mac2_buf[sizeof(mac2_buf) - 1] = '\0';
-		src_mac2 = mac2_buf;
-		sv_id2 = streams_prop.sv_id2;
-	}
-	
-	if (dst_mac1 == NULL && dst_mac2 == NULL)
-		return 0;
-
-	return sv_start(dst_mac1, src_mac1, sv_id1, dst_mac2, src_mac2, sv_id2);
-}
-
-int sv_start(char *dst_mac1, char *src_mac1, char *sv_id1, char *dst_mac2, char *src_mac2, char *sv_id2)
-{
-	if (descr) { 
-		pcap_breakloop(descr);
-#ifndef LOCAL_DEBUG
-		uv_thread_join(&thread);
-#endif
-	}
-
-	if (dst_mac1)
-		adr[0].dst_mac = strdup(dst_mac1);
-	if (src_mac1)
-		adr[0].src_mac = strdup(src_mac1);
-	if (sv_id1) {
-		adr[0].sv_id = strdup(sv_id1);
-		adr[0].sv_id_len = strlen(sv_id1);
-	}
-	if (dst_mac2)
-		adr[1].dst_mac = strdup(dst_mac2);
-	if (src_mac2)
-		adr[1].src_mac = strdup(src_mac2);
-	if (sv_id2) {
-		adr[1].sv_id = strdup(sv_id2);
-		adr[1].sv_id_len = strlen(sv_id2);
-	}
-
-#ifdef LOCAL_DEBUG
-	srun();
-#else
-	uv_thread_create(&thread, run, NULL);
-	int ret;
-	if ((ret = pthread_setschedprio(thread, sched_get_priority_max(sched_getscheduler(thread)))) != 0) {
-		emd_log(LOG_ERR, "pthread_setschedprio() failed: %d", ret);
-	}
-#endif
 	return 0;
 }
 
@@ -329,7 +241,7 @@ void stream_states(int *s1, int *s2)
 	struct timeval tv1, tv2;
 	uv_mutex_lock(&mutex);
 	tv1 = cur[0].ts;
-	tv2 = cur[2].ts;
+	tv2 = cur[1].ts;
 	uv_mutex_unlock(&mutex);
 	if (s1)
 		*s1 = (memcmp(&tv1, &stream1_alive_ts, sizeof(tv1)) != 0);
@@ -341,16 +253,73 @@ void stream_states(int *s1, int *s2)
 	stream2_alive_ts = tv2;
 }
 
-void run(void *arg)
+int read_start()
 {
-	srun();
-}
+	if (descr) { 
+		pcap_breakloop(descr);
+#ifndef LOCAL_DEBUG
+		uv_thread_join(&thread);
+#endif
+	}
 
-int srun()
-{
-	int ret = -1;
+	int used = 0;
+	if (streams_prop.stream1 == 0) {
+		if (memcmp(emd_mac, adc_prop.dst_mac, 17) == 0)
+			used = 1;
+	} else
+		used = 1;
+	
+	if (!used && streams_prop.stream2 == 1) 
+		used = 1;
+
+	if (!used)
+		return 0;
 
 	char *filter = NULL;
+	char smac1[17+1] = {0}, smac2[17+1] = {0};
+	char *fmt[] = {
+		"vlan 32768 and ether dst %s",
+		"vlan 32768 and ether dst %s and ether src %s",
+		"vlan 32768 and ether dst %s and (ether src %s or ether src %s)"
+	};
+	if (streams_prop.stream1 == 0) {
+		strncpy(smac1, adc_prop.src_mac, 17);
+		sv_id[0] = strdup(adc_prop.sv_id);
+	}
+	else {
+		sv_id[0] = strdup(streams_prop.sv_id1);
+		if (streams_prop.mac1[0] != '\0')
+			strncpy(smac1, streams_prop.mac1, 17);
+	}
+
+	if (streams_prop.stream2 == 1) {
+		sv_id[1] = strdup(streams_prop.sv_id2);
+		if (streams_prop.mac2[0] != '\0')
+			strncpy(smac1[0] == '\0'? smac1: smac2, streams_prop.mac2, 17);
+	}
+
+	if (smac1[0] && smac2[0])
+		asprintf(&filter, fmt[2], emd_mac, smac1, smac2);
+	else if (smac1[0])
+		asprintf(&filter, fmt[1], emd_mac, smac1);
+	else
+		asprintf(&filter, fmt[0], emd_mac);
+
+#ifdef LOCAL_DEBUG
+	run(filter);
+#else
+	uv_thread_create(&thread, run, filter);
+	int ret;
+	if ((ret = pthread_setschedprio(thread, sched_get_priority_max(sched_getscheduler(thread)))) != 0) {
+		emd_log(LOG_ERR, "pthread_setschedprio() failed: %d", ret);
+	}
+#endif
+	return 0;
+}
+
+void run(void *arg)
+{
+	char *filter = (char *)arg;
 
 	struct bpf_program fp;
     descr = pcap_open_live(ifname, BUFSIZ, 1, -1, errbuf); 
@@ -362,38 +331,7 @@ int srun()
 	bpf_u_int32 maskp;          /* subnet mask */
 	bpf_u_int32 netp;           /* ip */
 	pcap_lookupnet(ifname, &netp, &maskp, errbuf);
-	
-	filter = strdup("vlan 32768");
-	if (adr[0].dst_mac) {
-		char *fil = NULL;
-		asprintf(&fil, "%s and ether dst %s",
-			filter, adr[0].dst_mac); 
-		free(filter);
-		filter = fil;
-	}
-	if (adr[0].src_mac) {
-		char *fil = NULL;
-		asprintf(&fil, "%s and (ether src %s",
-			filter, adr[0].src_mac); 
-		free(filter);
-		filter = fil;
-	}
-#if 0
-	if (adr[1].dst_mac) {
-		char *fil = NULL;
-		asprintf(&fil, "%s and ether dst %s",
-			filter, adr[1].dst_mac); 
-		free(filter);
-		filter = fil;
-	}
-#endif
-	if (adr[1].src_mac) {
-		char *fil = NULL;
-		asprintf(&fil, "%s or ether src %s)",
-			filter, adr[1].src_mac); 
-		free(filter);
-		filter = fil;
-	}
+
 	if(pcap_compile(descr, &fp, filter, 0, netp) == -1) {
 		emd_log(LOG_DEBUG, "Error calling pcap_compile(%s): %s", filter, errbuf);
 		goto err;
@@ -406,21 +344,14 @@ int srun()
 	
 	pcap_loop(descr, PROCESSED_MAX, pcap_callback, NULL);
 
-	ret = 0;
 err:
 	free(filter);
 	pcap_close(descr);
 	descr = NULL;
-	
-	for (int i = 0; i < 2; i++) {
-		free(adr[i].dst_mac);
-		free(adr[i].src_mac);
-		free(adr[i].sv_id);
-	}
 
-	memset(adr, 0, sizeof(sv_address)*2);
-
-	return ret;
+	free(sv_id[0]);
+	free(sv_id[1]);
+	memset(sv_id, 0, sizeof(sv_id));
 }
 
 void pcap_callback(u_char *useless, 
@@ -490,11 +421,9 @@ int parse_tlv(const u_char *p, int *size)
 			else {/* case T_ID: */
 				if (idx != -1)
 					break;
-				if (adr[0].sv_id_len == len &&
-					memcmp(p, adr[0].sv_id,	len) == 0)
+				if (strncmp((const char *)p, sv_id[0], len) == 0)
 					idx = 0;
-				else if (adr[1].sv_id_len == len &&
-					memcmp(p, adr[1].sv_id, len) == 0)
+				else if (strncmp((const char *)p, sv_id[1], len) == 0)
 					idx = 1;
 				else {
 					st->err_sv_id++;
@@ -677,7 +606,7 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 			stm2 = malloc(s2->rate * sizeof(*stm2));
 			*stream2_size = s2->rate;
 			for (int i = 0; i < s2->rate; i++)
-				stm2[i] = s1->data[i];
+				stm2[i] = s2->data[i];
 			*stream2 = stm2;
 		}
 		else {

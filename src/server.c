@@ -187,8 +187,12 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				u_ab_resp *data = (u_ab_resp *)resp->data;
 				*data = *uab;
 				free(uab);
+#if 0
 				data->rms_ua = htobe64(data->rms_ua);
+				data->abs_phi_ua = htobe64(data->abs_phi_ua);
 				data->rms_ub = htobe64(data->rms_ub);
+				data->abs_phi_ub = htobe64(data->abs_phi_ub);
+#endif
 				*out = (void *)resp;
 				*out_len = sizeof(pdu_t) + ret;
 			}
@@ -210,8 +214,12 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				ua_ua_resp *data = (ua_ua_resp *)resp->data;
 				*data = *uaua;
 				free(uaua);
+#if 0
 				data->rms_ua1 = htobe64(data->rms_ua1);
+				data->abs_phi_ua1 = htobe64(data->abs_phi_ua1);
 				data->rms_ua2 = htobe64(data->rms_ua2);
+				data->abs_phi_ua2 = htobe64(data->abs_phi_ua2);
+#endif
 				*out = (void *)resp;
 				*out_len = sizeof(pdu_t) + ret;
 			}

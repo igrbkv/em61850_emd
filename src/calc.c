@@ -10,12 +10,18 @@
 #include <stdio.h>
 #endif
 
+struct calc_result {
+	double rms;
+	double abs_phi;
+};
+
 const unsigned int EQ_TRAILS = 0; // На сколько уменьшать длину вектора данных чтобы учесть работу эквалайзера
 
 double Kf = 1.0;
 static int harmonics_count = 6;
 //static int subharmonics_count = 6;
 
+static void do_calculations(double *data, int len, struct calc_result *calc_res); 
 static double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb);
 static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp); 
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
@@ -38,7 +44,26 @@ int make_u_ab(struct u_ab **uab)
 	len = sizeof(struct u_ab);
 	*uab = malloc(len);
 	(*uab)->ts = ts;
+#if 1
+	struct calc_result calc_res;
+	double *values;
+	values = calloc(s1_size, sizeof(double));
+	for (int i = 0; i < s1_size; i++)
+		values[i] = (double)s1[i].ua;
 
+	do_calculations(values, s1_size, &calc_res);
+	(*uab)->rms_ua = calc_res.rms;
+	(*uab)->abs_phi_ua = calc_res.abs_phi;
+
+	for (int i = 0; i < s1_size; i++)
+		values[i] = (double)s1[i].ub;
+
+	do_calculations(values, s1_size, &calc_res);
+	(*uab)->rms_ub = calc_res.rms;
+	(*uab)->abs_phi_ub = calc_res.abs_phi;
+
+	free(values);
+#else
 #ifdef DEBUG
 	FILE *fp = fopen("dump_uab", "a");
 #endif
@@ -59,6 +84,7 @@ int make_u_ab(struct u_ab **uab)
 	fprintf(fp, "#############################\n");
 	fclose(fp);
 #endif
+#endif
 
 	return len; 
 }
@@ -77,16 +103,41 @@ int make_ua_ua(struct ua_ua **uaua)
 	if (s1_size == 0 && s2_size == 0)
 		return 0;
 	
+	len = sizeof(struct ua_ua);
+	*uaua = malloc(len);
+
 	(*uaua)->flags = 0x0;
+
 	if (s1_size)
 		(*uaua)->flags |= STREAM1_OK;
 	if (s2_size)
 		(*uaua)->flags |= STREAM2_OK;
 
-	len = sizeof(struct ua_ua);
-	*uaua = malloc(len);
 	(*uaua)->ts = ts;
 
+#if 1
+	struct calc_result calc_res;
+	double *values;
+	values = calloc(s1_size > s2_size? s1_size: s2_size, sizeof(double));
+	if (s1_size) {
+		for (int i = 0; i < s1_size; i++)
+			values[i] = (double)s1[i].ua;
+
+		do_calculations(values, s1_size, &calc_res);
+		(*uaua)->rms_ua1 = calc_res.rms;
+		(*uaua)->abs_phi_ua1 = calc_res.abs_phi;
+	}
+	
+	if (s2_size) {
+		for (int i = 0; i < s2_size; i++)
+			values[i] = (double)s2[i].ua;
+
+		do_calculations(values, s2_size, &calc_res);
+		(*uaua)->rms_ua2 = calc_res.rms;
+		(*uaua)->abs_phi_ua2 = calc_res.abs_phi;
+	}
+	free(values);
+#else
 #ifdef DEBUG
 	FILE *fp = fopen("dump_ua_ua", "a");
 #endif
@@ -119,21 +170,19 @@ int make_ua_ua(struct ua_ua **uaua)
 #ifdef DEBUG
 	fclose(fp);
 #endif
+#endif
 
 	return len; 
 }
 
-void do_calculations(double *data, int len,  double *data_complex) 
+void do_calculations(double *data, int len, struct calc_result *calc_res) 
 {
 	int v_size = len - EQ_TRAILS;
 	double *data_complex_out;
 	// FIXME if len = 1 sec
 	double t_samp = 1./len;
 	
-	if (data_complex)
-		data_complex_out = data_complex;
-	else
-		data_complex_out = calloc(len*2, sizeof(double));
+	data_complex_out = calloc(len*2, sizeof(double));
 	double *hanning_full = calloc(v_size, sizeof(double));
 	double *data_wh = calloc(v_size, sizeof(double));
 	double *tmp_data = calloc(len*2, sizeof(double));
@@ -171,7 +220,8 @@ void do_calculations(double *data, int len,  double *data_complex)
 		data_wh_wz[j] = data_wh[i] ;
 	}
 	rms_wh = sqrt(rms_wh);
-	
+
+	calc_res->rms = rms_wh;
 	// TODO: пока считается только супремум
 	
 	//channelData->rms.addValue(rms_wh);
@@ -199,9 +249,11 @@ void do_calculations(double *data, int len,  double *data_complex)
 	int i_max = 0;
 	i_max = rev_win_han_scan(ampl_spectre, 3, len / 2 - 1, ar, len, t_samp);
 
+	calc_res->abs_phi = calc_abs_phi(data_complex_out, t_samp, i_max, len);
+
 	//channelData->f_hard.addValue(ar[0]);
 	//channelData->f_real.addValue(ar[0]);
-	//ar[ 0 ] *= Kf;
+	ar[ 0 ] *= Kf;
 	//channelData->firstHarmonic.addValue(ar[ 2 ]);
 	//channelData->f_1.addValue(ar[ 0 ]);
 	//channelData->absPhi.addValue(calc_abs_phi(data_complex, t_samp, aperture, i_max, data.size(),
@@ -241,6 +293,7 @@ void do_calculations(double *data, int len,  double *data_complex)
 
 		double absPhi = calc_abs_phi(data_complex_out, t_samp, i_max, len);
 
+
 		//double absdT = channelData->absPhi.getCurrent()/(2.0*M_PI*ar_cur[0]);
 		//harmonics_freq.push_back(ar_cur[ 0 ]);
 		//harmonics_coef.push_back(ar_cur[ 1 ]);
@@ -276,8 +329,7 @@ void do_calculations(double *data, int len,  double *data_complex)
 #endif
 
 	free(tmp_data);
-	if (!data_complex)
-		free(data_complex_out);
+	free(data_complex_out);
 }
 
 double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb) 
@@ -400,8 +452,8 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
 
 	memcpy(bb, b, sizeof(double)*ne);
 	
-    dfour1(vvv, esize, 1);
-    dfour1(b, esize, 1);
+    dfour1(vvv-1, esize, 1);
+    dfour1(b-1, esize, 1);
 
 	for(k = 0; k < ne; k += 2) {
         pp = vvv[k] * b[k] - vvv[k + 1] * b[k + 1];
@@ -409,7 +461,7 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
         vvv[k] = pp;
 	}
 
-    dfour1(vvv, esize, -1);
+    dfour1(vvv-1, esize, -1);
 
 	for(k = 0; k < 2*num_samples; k += 2) {
         out_v[k]  = (vvv[k] * bb[k] + vvv[k+1] * bb[k+1]);
@@ -428,7 +480,72 @@ void dfour1(double data[], unsigned int nn2, int isign) {
 	unsigned int n,mmax,m,j,istep,i;
 	double wtemp,wr,wpr,wpi,wi,theta;
 	double tempr,tempi;
+#if 1
+	n=nn2 << 1;
+	j=1;
 
+	for (i=1;i<n;i+=2) {
+		if (j > i) {
+			double tmp = data[j];
+			data[j] = data[i];
+			data[i] = tmp;
+
+			tmp = data[j + 1];
+			data[j + 1] = data[i + 1];
+			data[i + 1] = tmp;
+		}
+		m=n >> 1;
+		while (m >= 2 && j > m) {
+			j -= m;
+			m >>= 1;
+		}
+		j += m;
+	}
+	mmax=2;
+
+	while (n > mmax) {
+		istep=mmax << 1;
+		theta=isign*(6.28318530717959/mmax);
+		wtemp=sin(0.5*theta);
+		wpr = -2.0*wtemp*wtemp;
+		wpi=sin(theta);
+		wr=1.0;
+		wi=0.0;
+		for (m=1;m<mmax;m+=2) {
+			for (i=m;i<=n;i+=istep) {
+				j=i+mmax;
+				tempr=wr*data[j]-wi*data[j+1];
+				tempi=wr*data[j+1]+wi*data[j];
+				data[j]=data[i]-tempr;
+				data[j+1]=data[i+1]-tempi;
+				data[i] += tempr;
+				data[i+1] += tempi;
+			}
+			wr=(wtemp=wr)*wpr-wi*wpi+wr;
+			wi=wi*wpr+wtemp*wpi+wi;
+		}
+		mmax=istep;
+	}
+
+	for (i=3;i<nn2;i+=2)
+	{
+		tempr = data[i];
+		tempi = data[i + 1];
+		n = 2*(nn2+1)-i;
+		data[i] = data[n];
+		data[i + 1] = data[n + 1];
+		data[n] = tempr;
+		data[n + 1] = tempi;
+	} 
+	if (isign<0)
+	{
+		for (i=1;i<=2*nn2;i++)
+		{
+			data[i] = data[i] / nn2;
+		}
+	}
+
+#else
 	n=nn2 << 1;
 	j=0;
 
@@ -492,6 +609,7 @@ void dfour1(double data[], unsigned int nn2, int isign) {
 			data[i] = data[i] / nn2;
 		}
 	}
+#endif
 }
 
 unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp) 
