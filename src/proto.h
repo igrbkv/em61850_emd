@@ -27,6 +27,8 @@ enum REQ_CODES {
 	SET_STREAMS_PROP_REQ,
 	GET_U_AB_REQ,
 	GET_UA_UA_REQ,
+	GET_I_AB_REQ,
+	GET_IA_IA_REQ,
 };
 
 enum ERR_CODES {
@@ -102,26 +104,26 @@ struct __attribute__((__packed__)) streams_properties {
 
 typedef struct streams_properties streams_prop_resp;
 
-struct __attribute__((__packed__)) u_ab {
+struct __attribute__((__packed__)) ui_ab {
 	struct timeval ts;
-	double rms_ua;
-	double abs_phi_ua;
-	double rms_ub;
-	double abs_phi_ub;
+	double rms_a;
+	double abs_phi_a;
+	double rms_b;
+	double abs_phi_b;
 	float values[];
 }; 
 
-typedef struct u_ab u_ab_resp;
+typedef struct ui_ab ui_ab_resp;
 
-struct __attribute__((__packed__)) ua_ua {
+struct __attribute__((__packed__)) ui_a_ui_a {
 	struct timeval ts;
 	uint8_t flags;	// STREAM1_OK & STREAM2_OK
-	double rms_ua1;
-	double abs_phi_ua1;
-	double rms_ua2;
-	double abs_phi_ua2;
+	double rms_a1;
+	double abs_phi_a1;
+	double rms_a2;
+	double abs_phi_a2;
 	float values[];
 }; 
 
-typedef struct ua_ua ua_ua_resp;
+typedef struct ui_a_ui_a ui_a_ui_a_resp;
 #endif

@@ -4,8 +4,8 @@
 
 #include "proto.h"
 #include "sv_read.h"
-#include "debug.h"
 
+#include "debug.h"
 #ifdef DEBUG
 #include <stdio.h>
 #endif
@@ -27,9 +27,10 @@ static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, uns
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
 static void dfour1(double data[], unsigned int nn2, int isign);
 
-// @param  - uab
+// @param  ab:
+// @param  u: 1/0 potential/current  
 // @return - size of data(sizeof(struct u_ab) + sizeof(values))
-int make_u_ab(struct u_ab **uab)
+int make_ui_ab(struct ui_ab **ab, int u)
 {
 	int len;
 	struct timeval ts;
@@ -41,57 +42,48 @@ int make_u_ab(struct u_ab **uab)
 	if (s1_size == 0)
 		return 0;
 
-	len = sizeof(struct u_ab);
-	*uab = malloc(len);
-	(*uab)->ts = ts;
-#if 1
+	len = sizeof(struct ui_ab);
+	*ab = malloc(len);
+	(*ab)->ts = ts;
+
 	struct calc_result calc_res;
 	double *values;
 	values = calloc(s1_size, sizeof(double));
 	for (int i = 0; i < s1_size; i++)
-		values[i] = (double)s1[i].ua;
+		values[i] = u? (double)s1[i].ua: (double)s1[i].ia;
 
 	do_calculations(values, s1_size, &calc_res);
-	(*uab)->rms_ua = calc_res.rms;
-	(*uab)->abs_phi_ua = calc_res.abs_phi;
+	(*ab)->rms_a = calc_res.rms;
+	(*ab)->abs_phi_a = calc_res.abs_phi;
 
 	for (int i = 0; i < s1_size; i++)
-		values[i] = (double)s1[i].ub;
+		values[i] = u? (double)s1[i].ub: (double)s1[i].ib;
 
 	do_calculations(values, s1_size, &calc_res);
-	(*uab)->rms_ub = calc_res.rms;
-	(*uab)->abs_phi_ub = calc_res.abs_phi;
+	(*ab)->rms_b = calc_res.rms;
+	(*ab)->abs_phi_b = calc_res.abs_phi;
 
-	free(values);
-#else
 #ifdef DEBUG
-	FILE *fp = fopen("dump_uab", "a");
-#endif
+	FILE *fp = fopen(u? "dump_uab": "dump_iab", "a");
 
-	double rms_a = 0., rms_b = 0.;
 	for (int i = 0; i < s1_size; i++) {
-		rms_a += ((double)s1[i].ua) * ((double)s1[i].ua);  
-		rms_b += (double)s1[i].ub * (double)s1[i].ub;  
-#ifdef DEBUG
-		fprintf(fp, "%d: %d, %d\n", i, s1[i].ua, s1[i].ub);
-#endif
+		fprintf(fp, "%d: %d, %d\n", i, u? s1[i].ua: s1[i].ia, u? s1[i].ub: s1[i].ib);
 	}
 
-	(*uab)->rms_ua =  sqrt(rms_a/s1_size);
-	(*uab)->rms_ub =  sqrt(rms_b/s1_size);
-
-#ifdef DEBUG
 	fprintf(fp, "#############################\n");
 	fclose(fp);
 #endif
-#endif
+
+	free(values);
+	free(s1);
 
 	return len; 
 }
 
-// @param  - ua_ua
-// @return - size of data(sizeof(struct ua_ua) + sizeof(values))
-int make_ua_ua(struct ua_ua **uaua)
+// @param ui_a_ui_a:
+// @param  u: 1/0 potential/current  
+// @return - size of data(sizeof(struct ui_a_ui_a) + sizeof(values))
+int make_ui_a_ui_a(struct ui_a_ui_a **aa, int u)
 {
 	int len;
 	struct timeval ts;
@@ -102,75 +94,70 @@ int make_ua_ua(struct ua_ua **uaua)
 
 	if (s1_size == 0 && s2_size == 0)
 		return 0;
-	
-	len = sizeof(struct ua_ua);
-	*uaua = malloc(len);
 
-	(*uaua)->flags = 0x0;
+
+	len = sizeof(struct ui_a_ui_a);
+	*aa = malloc(len);
+	memset(*aa, 0, len);
 
 	if (s1_size)
-		(*uaua)->flags |= STREAM1_OK;
+		(*aa)->flags |= STREAM1_OK;
 	if (s2_size)
-		(*uaua)->flags |= STREAM2_OK;
+		(*aa)->flags |= STREAM2_OK;
 
-	(*uaua)->ts = ts;
+	(*aa)->ts = ts;
 
-#if 1
 	struct calc_result calc_res;
 	double *values;
 	values = calloc(s1_size > s2_size? s1_size: s2_size, sizeof(double));
+
 	if (s1_size) {
 		for (int i = 0; i < s1_size; i++)
-			values[i] = (double)s1[i].ua;
+			values[i] = u? (double)s1[i].ua: (double)s1[i].ia;
 
 		do_calculations(values, s1_size, &calc_res);
-		(*uaua)->rms_ua1 = calc_res.rms;
-		(*uaua)->abs_phi_ua1 = calc_res.abs_phi;
+		(*aa)->rms_a1 = calc_res.rms;
+		(*aa)->abs_phi_a1 = calc_res.abs_phi;
 	}
 	
 	if (s2_size) {
 		for (int i = 0; i < s2_size; i++)
-			values[i] = (double)s2[i].ua;
+			values[i] = u? (double)s2[i].ua: (double)s2[i].ia;
 
 		do_calculations(values, s2_size, &calc_res);
-		(*uaua)->rms_ua2 = calc_res.rms;
-		(*uaua)->abs_phi_ua2 = calc_res.abs_phi;
-	}
-	free(values);
-#else
-#ifdef DEBUG
-	FILE *fp = fopen("dump_ua_ua", "a");
-#endif
-
-#ifdef DEBUG
-	fprintf(fp, "111111111111111111111111\n");
-#endif
-	double rms = 0.;
-	for (int i = 0; i < s1_size; i++) {
-		rms += (double)s1[i].ua * (double)s1[i].ua;
-#ifdef DEBUG
-	fprintf(fp, "%d: %d\n", i, s1[i].ua);
-#endif
+		(*aa)->rms_a2 = calc_res.rms;
+		(*aa)->abs_phi_a2 = calc_res.abs_phi;
 	}
 
-	(*uaua)->rms_ua1 =  sqrt(rms/s1_size);
 #ifdef DEBUG
-	fprintf(fp, "222222222222222222222222\n");
-#endif
-	rms = 0.;
-	for (int i = 0; i < s2_size; i++) {
-		rms += (double)s2[i].ua * (double)s2[i].ua;
-#ifdef DEBUG
-	fprintf(fp, "%d: %d\n", i, s2[i].ua);
-#endif
+	FILE *fp = fopen(u? "dump_ua_ua": "dump_ia_ia", "a");
+	fprintf(fp, "************************\n");
+	fprintf(fp, "time stamp:%lu.%06lu\nrms1:%.8f phi1:%.8f deg\nrms2:%.8f phi2:%.8f deg\n", ts.tv_sec, ts.tv_usec, (*aa)->rms_a1, (*aa)->abs_phi_a1*180./M_PI, (*aa)->rms_a2, (*aa)->abs_phi_a2*180./M_PI);
+	if (s1_size == s2_size)
+		for (int i = 0; i < s1_size; i++)
+			fprintf(fp, "%d,%d,%d\n", i, u? s1[i].ua: s1[i].ia,  u? s2[i].ua: s2[i].ia);
+	else {
+		if (s1_size) {
+			fprintf(fp, "111111111111111111111111\n");
+			for (int i = 0; i < s1_size; i++)
+				fprintf(fp, "%d: %d\n", i, u? s1[i].ua: s1[i].ia);
+		}
+
+		if (s2_size) {
+			fprintf(fp, "222222222222222222222222\n");
+			for (int i = 0; i < s2_size; i++)
+				fprintf(fp, "%d: %d\n", i, u? s2[i].ua: s2[i].ia);
+		}
 	}
 
-	(*uaua)->rms_ua2 =  sqrt(rms/s2_size);
-
-#ifdef DEBUG
 	fclose(fp);
 #endif
-#endif
+
+	if (s1_size)
+		free(s1);
+	if (s2_size)
+		free(s2);
+	free(values);
 
 	return len; 
 }
@@ -191,15 +178,6 @@ void do_calculations(double *data, int len, struct calc_result *calc_res)
 		hanning_full[i] = (1. + cos(M_PI/v_size*k))/v_size;
 	}
 
-	// >>>>>масштабирование>>>>>>	
-	//<<<<<масштабирование<<<<<<
-	// mean_wh - Idc
-	// rect_mean_h - Ivypr
-	// Kf Ivypr/Irms
-	// Kc Iampl/Irms
-	// ampl - max of data
-
-
 	// calc RMS
 	double rect_mean_h = 0.0,
 		   rms_wh = 0.0,
@@ -209,7 +187,7 @@ void do_calculations(double *data, int len, struct calc_result *calc_res)
 	double *data_wh_wz = tmp_data;	   
 	memset(data_wh_wz, 0, len*2 * sizeof(double));
 
-	for (int i = 0, j = 0; i < v_size; i++, j += 2) {
+	for (int i = 0; i < v_size; i++) {
 		rect_mean_h += fabs(data[ i ] * hanning_full[ i ]);
 		rms_wh += hanning_full[ i ] * data[ i ] * data[ i ];		
 		mean_wh += hanning_full[ i ] * data[ i ];
@@ -217,73 +195,32 @@ void do_calculations(double *data, int len, struct calc_result *calc_res)
 		if (data[i] > ampl)
 			ampl = data[i];
 
-		data_wh_wz[j] = data_wh[i] ;
+		data_wh_wz[i*2] = data_wh[i] ;
 	}
 	rms_wh = sqrt(rms_wh);
 
 	calc_res->rms = rms_wh;
-	// TODO: пока считается только супремум
-	
-	//channelData->rms.addValue(rms_wh);
-	//channelData->mean_wh.addValue(mean_wh);
-	//channelData->rect_mean_h.addValue(rect_mean_h);
-	//channelData->amplitude.addValue(ampl);
-	//channelData->K_f.addValue(rms_wh / rect_mean_h);
-	//channelData->K_s.addValue(ampl / rms_wh);
-	//------------------------------------------------------------------------------------------
 
 	// преобр Фурье
-		
-	// general_transform
 	general_transform(data_wh_wz, data_complex_out, len, 1);
 
 	// ampl spectre
 	double *ampl_spectre = tmp_data;
 	memset(ampl_spectre, 0, len*2*sizeof(double));
 	for (int i = 0; i < 2*len; i+= 2)
-		ampl_spectre[i] = sqrt(pow(data_complex_out[i], 2) + pow(data_complex_out[i + 1], 2));
+		ampl_spectre[i/2] = sqrt(pow(data_complex_out[i], 2) + pow(data_complex_out[i + 1], 2));
 
 	// rev_win_han
 	double ar[3];
 
-	int i_max = 0;
-	i_max = rev_win_han_scan(ampl_spectre, 3, len / 2 - 1, ar, len, t_samp);
+	int i_max = rev_win_han_scan(ampl_spectre, 3, len / 2 - 1, ar, len, t_samp);
 
 	calc_res->abs_phi = calc_abs_phi(data_complex_out, t_samp, i_max, len);
 
-	//channelData->f_hard.addValue(ar[0]);
-	//channelData->f_real.addValue(ar[0]);
 	ar[ 0 ] *= Kf;
-	//channelData->firstHarmonic.addValue(ar[ 2 ]);
-	//channelData->f_1.addValue(ar[ 0 ]);
-	//channelData->absPhi.addValue(calc_abs_phi(data_complex, t_samp, aperture, i_max, data.size(),
-	//channelData->dAbsdT.addValue(channelData->absPhi.getCurrent()/(2.0*M_PI*channelData->f_1.getCurrent()));
-
-	// harmonics
-	// подготовка значений индекса массива для расчета гармоник
-	//const int max_harm = 15;
-
+	
 	const int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
 	const int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
-
-	//QVector<double> harmonics_freq;
-	//QVector<double> harmonics_ampl;
-	//QVector<double> harmonics_coef;
-	//QVector<double> harmonics_absphi;
-	//QVector<double> harmonics_absdt;
-	
-	// 0
-	//harmonics_freq.push_back(0.0);	
-	//harmonics_coef.push_back(1.0);
-	//harmonics_ampl.push_back(mean_wh);
-	//harmonics_absphi.push_back(0.0);
-	//harmonics_absdt.push_back(0.0);
-	// 1
-	//harmonics_freq.push_back(ar[ 0 ]);
-	//harmonics_coef.push_back(ar[ 1 ]);	
-	//harmonics_ampl.push_back(ar[ 2 ]);
-	//harmonics_absphi.push_back(channelData->absPhi.getCurrent());
-	//harmonics_absdt.push_back(777/*channelData->dAbsdT.getCurrent()*/);
 
 	for	(int i = 2; i < max_harm; i++) {
 		int idx = len * t_samp * ar[0] * i + 0.5;
@@ -293,43 +230,12 @@ void do_calculations(double *data, int len, struct calc_result *calc_res)
 
 		double absPhi = calc_abs_phi(data_complex_out, t_samp, i_max, len);
 
-
-		//double absdT = channelData->absPhi.getCurrent()/(2.0*M_PI*ar_cur[0]);
-		//harmonics_freq.push_back(ar_cur[ 0 ]);
-		//harmonics_coef.push_back(ar_cur[ 1 ]);
-		//harmonics_ampl.push_back(ar_cur[ 2 ]);
-		//harmonics_absphi.push_back(absPhi);
-		//harmonics_absdt.push_back(absdT);
-
-		//todo angle between n-harm and 1st harm
-
-		// Harmonics 4
-		//channelData->harmonicsFreq = harmonics_freq;
-		//channelData->harmonicsAmpl = harmonics_ampl;
-		//channelData->harmonicsCoef = harmonics_coef;
-		//channelData->harmonicsAbsPhi = harmonics_absphi;
-		//channelData->harmonicsAbsdT = harmonics_absdt;
 	}
 	
-#if 0
-	// THD
-	double THD_cur = 0.0;
-	double *harmonics_k = tmp_data;
-	memset(tmp_data, 0, len*2*sizeof(double));
-	harmonics_k[0] = 100 * harmonics_ampl[ 0 ] / harmonics_ampl[ 1 ];
-	harmonics_k[1] = 100;
-	for(int i = 2; i < max_harm; i++) {
-		harmonics_k[i] = 100 * harmonics_ampl[ i ] / harmonics_ampl[ 1 ];
-		THD_cur += pow(harmonics_ampl[ i ], 2);
-	}
-	THD_cur = 100 * sqrt(THD_cur)/ harmonics_ampl[ 1 ];
-
-	//channelData->harmonics_k = harmonics_k;
-	//channelData->thd.addValue(THD_cur);
-#endif
-
-	free(tmp_data);
 	free(data_complex_out);
+	free(hanning_full);
+	free(data_wh);
+	free(tmp_data);
 }
 
 double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb) 

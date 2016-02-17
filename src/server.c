@@ -171,55 +171,63 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 			break;
 		}
-		case GET_U_AB_REQ: {
+		case GET_U_AB_REQ: 
+		case GET_I_AB_REQ: {
 			if (hdr->data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_U_AB_REQ error data size!");
+				emd_log(LOG_DEBUG, "GET_X_AB_REQ error data size!");
 				return -1;
 			}
-			u_ab_resp *uab;
-			int ret = make_u_ab(&uab);
+			ui_ab_resp *ab;
+			int ret = make_ui_ab(&ab, hdr->msg_code == GET_U_AB_REQ? 1: 0);
 			if (ret == 0)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 			else {
 				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
 				resp->msg_code = hdr->msg_code;
 				resp->data_len = htons(ret);
-				u_ab_resp *data = (u_ab_resp *)resp->data;
-				*data = *uab;
-				free(uab);
-#if 0
-				data->rms_ua = htobe64(data->rms_ua);
-				data->abs_phi_ua = htobe64(data->abs_phi_ua);
-				data->rms_ub = htobe64(data->rms_ub);
-				data->abs_phi_ub = htobe64(data->abs_phi_ub);
-#endif
+				ui_ab_resp *data = (ui_ab_resp *)resp->data;
+				*data = *ab;
+				free(ab);
+				uint64_t *v = (uint64_t *)&data->rms_a;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->abs_phi_a;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->rms_b;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->abs_phi_b;
+				*v = htobe64(*v);
+
 				*out = (void *)resp;
 				*out_len = sizeof(pdu_t) + ret;
 			}
 			break;
 		} 
-		case GET_UA_UA_REQ: {
+		case GET_UA_UA_REQ: 
+		case GET_IA_IA_REQ: {
 			if (hdr->data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_UA_UA_REQ error data size!");
+				emd_log(LOG_DEBUG, "GET_XA_XA_REQ error data size!");
 				return -1;
 			}
-			ua_ua_resp *uaua;
-			int ret = make_ua_ua(&uaua);
+			ui_a_ui_a_resp *aa;
+			int ret = make_ui_a_ui_a(&aa, hdr->msg_code == GET_UA_UA_REQ? 1: 0);
 			if (ret == 0)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 			else {
 				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
 				resp->msg_code = hdr->msg_code;
 				resp->data_len = htons(ret);
-				ua_ua_resp *data = (ua_ua_resp *)resp->data;
-				*data = *uaua;
-				free(uaua);
-#if 0
-				data->rms_ua1 = htobe64(data->rms_ua1);
-				data->abs_phi_ua1 = htobe64(data->abs_phi_ua1);
-				data->rms_ua2 = htobe64(data->rms_ua2);
-				data->abs_phi_ua2 = htobe64(data->abs_phi_ua2);
-#endif
+				ui_a_ui_a_resp *data = (ui_a_ui_a_resp *)resp->data;
+				*data = *aa;
+				free(aa);
+				uint64_t *v = (uint64_t *)&data->rms_a1;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->abs_phi_a1;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->rms_a2;
+				*v = htobe64(*v);
+				v = (uint64_t *)&data->abs_phi_a2;
+				*v = htobe64(*v);
+
 				*out = (void *)resp;
 				*out_len = sizeof(pdu_t) + ret;
 			}
