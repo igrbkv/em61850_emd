@@ -25,10 +25,13 @@ enum REQ_CODES {
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
+#if 0
 	GET_U_AB_REQ,
 	GET_UA_UA_REQ,
 	GET_I_AB_REQ,
 	GET_IA_IA_REQ,
+#endif
+	GET_CALC_REQ,
 };
 
 enum ERR_CODES {
@@ -104,6 +107,7 @@ struct __attribute__((__packed__)) streams_properties {
 
 typedef struct streams_properties streams_prop_resp;
 
+#if 0
 struct __attribute__((__packed__)) ui_ab {
 	struct timeval ts;
 	double rms_a;
@@ -126,4 +130,37 @@ struct __attribute__((__packed__)) ui_a_ui_a {
 }; 
 
 typedef struct ui_a_ui_a ui_a_ui_a_resp;
+#endif 
+
+#define STREAM2_START_IDX 8
+// 0..7  (Ia..Un) for stream 1
+// 8..15 (Ia..Un) for stream 2
+struct __attribute__((__packed__)) calc_req {
+	uint8_t idx1;
+	uint8_t idx2;
+};
+
+struct harmonic {
+	double f;
+	double k;
+	double ampl;
+};
+
+struct __attribute__((__packed__)) calc_results {
+	double rms;
+	double dc;
+	double f_1h;
+	double rms_1h;
+	double phi;
+	double thd;
+	uint8_t harmonics_num;
+	struct harmonic h[];
+};
+
+typedef struct  __attribute__((__packed__)) calc {
+	struct timeval ts;
+	uint8_t valid1;
+	uint8_t valid2;
+	uint8_t data[];
+} calc_resp; 
 #endif

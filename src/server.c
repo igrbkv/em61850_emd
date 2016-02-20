@@ -18,7 +18,7 @@
 
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
-
+static void calc_results_to_be64(struct calc_results *cr);
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -171,6 +171,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 			break;
 		}
+#if 0
 		case GET_U_AB_REQ: 
 		case GET_I_AB_REQ: {
 			if (hdr->data_len != 0) {
@@ -233,9 +234,74 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		} 
+#endif
+		case GET_CALC_REQ: {
+			if (hdr->data_len != sizeof(struct calc_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
+				return -1;
+			}
+			struct calc_req *req = (struct calc_req *)hdr->data; 
+
+			struct calc_results *c1, *c2;
+			int c1_size, c2_size;
+			struct timeval ts; 
+			make_calc(req->idx1, req->idx2, &ts, &c1, &c1_size, &c2, &c2_size);
+			if (c1_size == 0 && c2_size == 0)
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			else {
+				int len = sizeof(struct calc) + c1_size + c2_size;
+				pdu_t *resp = malloc(sizeof(pdu_t) + len);
+				resp->msg_code = hdr->msg_code;
+				resp->data_len = htons(len);
+				struct calc *clc = (struct calc *)resp->data;
+				clc->ts = ts;
+				clc->valid1 = c1_size != 0;
+				clc->valid2 = c2_size != 0;
+				if (c1_size != 0) {
+					struct calc_results *cr = (struct calc_results *)clc->data;
+					memcpy(cr, c1, c1_size);
+					calc_results_to_be64(cr);
+					free(c1);
+				}
+
+				if (c2_size != 0) {
+					struct calc_results *cr = (struct calc_results *)&clc->data[c1_size];
+					memcpy(cr, c2, c2_size);
+					calc_results_to_be64(cr);
+					free(c2);
+				}
+
+				*out = (void *)resp;
+				*out_len = sizeof(pdu_t) + len;
+			}
+			break;
+		} 
+
 	}
 
 	return sizeof(pdu_t) + hdr->data_len;;
+}
+
+void calc_results_to_be64(struct calc_results *cr)
+{
+	uint64_t *v = (uint64_t *)&cr->rms;
+	*v = htobe64(*v);
+	v = (uint64_t *)&cr->dc;
+	*v = htobe64(*v);
+	v = (uint64_t *)&cr->f_1h;
+	*v = htobe64(*v);
+	v = (uint64_t *)&cr->phi;
+	*v = htobe64(*v);
+	v = (uint64_t *)&cr->thd;
+	*v = htobe64(*v);
+	for (int i = 0; i < cr->harmonics_num; i++) {
+		v = (uint64_t *)&cr->h[i].f;
+		*v = htobe64(*v);
+		v = (uint64_t *)&cr->h[i].k;
+		*v = htobe64(*v);
+		v = (uint64_t *)&cr->h[i].ampl;
+		*v = htobe64(*v);
+	}
 }
 
 void apply_time(int32_t client_time)
