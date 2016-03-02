@@ -359,26 +359,36 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1,
 		fprintf(fp, "rms:%.8f dc:%.8f f_1h:%.8f rms_1h:%.8f phi:%.8f deg thd:%.8f\n", 
 			(*c2)->rms,
 			(*c2)->dc,
-			(*c1)->f_1h,
-			(*c1)->rms_1h,
-			(*c1)->phi*180./M_PI,
-			(*c1)->thd);
+			(*c2)->f_1h,
+			(*c2)->rms_1h,
+			(*c2)->phi*180./M_PI,
+			(*c2)->thd);
 	}
 
 	if (s1_size == s2_size)
 		for (int i = 0; i < s1_size; i++)
-			fprintf(fp, "%d,%d,%d\n", i, s1[i].values[idx1 * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+			fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
 	else {
 		if (s1_size) {
-			fprintf(fp, "111111111111111111111111\n");
-			for (int i = 0; i < s1_size; i++)
-				fprintf(fp, "%d: %d\n", i, s1[i].values[idx1 * 2]);
+			if (!stream2)
+				for (int i = 0; i < s1_size; i++)
+					fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s1[i].values[idx2 * 2]);
+			else {
+				fprintf(fp, "111111111111111111111111\n");
+				for (int i = 0; i < s1_size; i++)
+					fprintf(fp, "%8d: %8d\n", i, s1[i].values[idx1 * 2]);
+			}
 		}
 
 		if (s2_size) {
-			fprintf(fp, "222222222222222222222222\n");
-			for (int i = 0; i < s2_size; i++)
-				fprintf(fp, "%d: %d\n", i, s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+			if (!stream1)
+				for (int i = 0; i < s2_size; i++)
+					fprintf(fp, "%8d,%8d,%8d\n", i, s2[i].values[idx1 % STREAM2_START_IDX * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+			else {
+				fprintf(fp, "222222222222222222222222\n");
+				for (int i = 0; i < s2_size; i++)
+					fprintf(fp, "%8d: %8d\n", i, s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+			}
 		}
 	}
 
@@ -450,7 +460,7 @@ void do_calculations(double *data, int len, struct calc_results **calc_res, int 
 	const int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
 	const int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
 
-	*calc_size = sizeof(struct calc) + sizeof(struct harmonic)*(max_harm-2);
+	*calc_size = sizeof(struct calc_results) + sizeof(struct harmonic)*(max_harm > 2? max_harm - 2: 0);
 	*calc_res = malloc(*calc_size);
 
 	double thd = 0.;
@@ -466,7 +476,7 @@ void do_calculations(double *data, int len, struct calc_results **calc_res, int 
 		(*calc_res)->h[i-2].ampl = ar_cur[2];
 		thd += pow(ar_cur[2], 2);
 	}
-	thd = sqrt(thd) / ar[0];
+	thd = sqrt(thd) / ar[2];
 
 	(*calc_res)->harmonics_num = max_harm < 2? 0: max_harm - 2;
 	(*calc_res)->rms = rms_wh;

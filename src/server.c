@@ -254,7 +254,8 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				resp->msg_code = hdr->msg_code;
 				resp->data_len = htons(len);
 				struct calc *clc = (struct calc *)resp->data;
-				clc->ts = ts;
+				clc->ts_sec = htobe64(ts.tv_sec);
+				clc->ts_usec = htobe64(ts.tv_usec);
 				clc->valid1 = c1_size != 0;
 				clc->valid2 = c2_size != 0;
 				if (c1_size != 0) {
@@ -276,6 +277,8 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		} 
+		default:
+			return -1;
 
 	}
 
@@ -289,6 +292,8 @@ void calc_results_to_be64(struct calc_results *cr)
 	v = (uint64_t *)&cr->dc;
 	*v = htobe64(*v);
 	v = (uint64_t *)&cr->f_1h;
+	*v = htobe64(*v);
+	v = (uint64_t *)&cr->rms_1h;
 	*v = htobe64(*v);
 	v = (uint64_t *)&cr->phi;
 	*v = htobe64(*v);

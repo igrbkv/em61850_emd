@@ -133,6 +133,9 @@ typedef struct ui_a_ui_a ui_a_ui_a_resp;
 #endif 
 
 #define STREAM2_START_IDX 8
+#define I_START_IDX 0
+#define PHASES_NUM 4
+
 // 0..7  (Ia..Un) for stream 1
 // 8..15 (Ia..Un) for stream 2
 struct __attribute__((__packed__)) calc_req {
@@ -158,7 +161,8 @@ struct __attribute__((__packed__)) calc_results {
 };
 
 typedef struct  __attribute__((__packed__)) calc {
-	struct timeval ts;
+	uint64_t ts_sec;	// timeval64
+	uint64_t ts_usec;	// timeval64
 	uint8_t valid1;
 	uint8_t valid2;
 	uint8_t data[];
