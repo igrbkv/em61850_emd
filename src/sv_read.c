@@ -13,7 +13,7 @@
 #include <netinet/in.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
-#include <net/if.h> //ifreq
+#include <net/if.h> //ifreq, IF_NAMESIZE
 #include <netinet/if_ether.h> /* includes net/ethernet.h */
 #include <uv.h>		// for uv_mutex_t
 #include <sched.h>
@@ -23,6 +23,8 @@
 #include "log.h"
 #include "settings.h"
 #include "adc_client.h"
+
+
 
 /* Алгоритм приема данных:
  * pdu => cur (second) => ready (2 seconds)
@@ -137,6 +139,7 @@ static void print_statistic(bool finish);
 
 int sv_read_init()
 {
+	emd_log(LOG_INFO, "sv_read_init");
 	emd_mac[0] = '\0';
 	ifname[0] = '\0';
 	pcap_if_t *alldevs;
@@ -146,15 +149,18 @@ int sv_read_init()
 		if (d->flags & PCAP_IF_LOOPBACK)
 			continue;
 		else if (d->addresses) {
-			// вешаемся на первый попавшийся интерфейс
-			strncpy(ifname, d->name, IF_NAMESIZE-1);
-			break;		
+			emd_log(LOG_DEBUG, "found iface: %s", d->name);
+			if (d->name[0] == 'e') {
+				// вешаемся на первый попавшийся интерфейс
+				strncpy(ifname, d->name, IF_NAMESIZE-1);
+				break;		
+			}
 		}
 	}
 	pcap_freealldevs(alldevs);
 
 	if (ifname[0] == '\0') {
-		emd_log(LOG_DEBUG, "pcap did not find iface device");
+		emd_log(LOG_ERR, "pcap did not find iface device");
 		return -1;
 	} else {
 		int fd;
@@ -174,13 +180,15 @@ int sv_read_init()
 			close(fd);
 			return -1;
 		} else {
-			sprintf(emd_mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+			char buf[32];
+			snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
 				(uint8_t)ifr.ifr_hwaddr.sa_data[0],
 				(uint8_t)ifr.ifr_hwaddr.sa_data[1],
 				(uint8_t)ifr.ifr_hwaddr.sa_data[2],
 				(uint8_t)ifr.ifr_hwaddr.sa_data[3],
 				(uint8_t)ifr.ifr_hwaddr.sa_data[4],
 				(uint8_t)ifr.ifr_hwaddr.sa_data[5]);
+			memcpy(emd_mac, buf, 17);
 		}
 
 		close(fd);
@@ -304,7 +312,8 @@ int read_start()
 		asprintf(&filter, fmt[1], emd_mac, smac1);
 	else
 		asprintf(&filter, fmt[0], emd_mac);
-
+	
+	emd_log(LOG_INFO, "Filter: %s", filter);
 #ifdef LOCAL_DEBUG
 	run(filter);
 #else

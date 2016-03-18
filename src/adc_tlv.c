@@ -14,7 +14,8 @@
 
 #include "adc_tlv.h"
 #include "log.h"
-#include "debug.h"
+
+//#include "debug.h"
 
 #ifdef TLV_ALLOC_MEM
 static int break_tlv(uint8_t *tag, uint8_t **data, int *len);

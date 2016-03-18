@@ -143,7 +143,7 @@ struct __attribute__((__packed__)) calc_req {
 	uint8_t idx2;
 };
 
-struct harmonic {
+struct __attribute__((__packed__)) harmonic {
 	double f;
 	double k;
 	double ampl;

@@ -17,10 +17,7 @@
 #include "settings.h"
 #include "adc_client.h"
 
-#define DEBUG
-#ifdef DEBUG
-#include "debug.h"
-#endif
+//#include "debug.h"
 
 #define DEFAULT_ADC_PORT 1234
 #define DEFAULT_ADC_IP4_ADDRESS "192.168.0.2"
@@ -304,18 +301,22 @@ int read_properties()
 	req[0] = 0;
 	if ((ret = adc_send_recv(0xbb, req, 1, &tag, resp, sizeof(resp))) == -1)
 		return -1;
-	if (tag == 0x32 && ret == 6)
-		sprintf(adc_prop.src_mac, "%02X:%02X:%02X:%02X:%02X:%02X", 
+	if (tag == 0x32 && ret == 6) {
+		char buf[32];
+		snprintf(buf, sizeof(buf),  "%02X:%02X:%02X:%02X:%02X:%02X", 
 			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
-	else
+		memcpy(adc_prop.src_mac, buf, 17);
+	} else
 		goto err;
 
 	if ((ret = adc_send_recv(0xb5, req, 1, &tag, resp, sizeof(resp))) == -1)
 		return -1;
-	if (tag == 0x32 && ret == 6)
-		sprintf(adc_prop.dst_mac, "%02X:%02X:%02X:%02X:%02X:%02X", 
+	if (tag == 0x32 && ret == 6) {
+		char buf[32];
+		snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", 
 			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
-	else
+		memcpy(adc_prop.dst_mac, buf, 17);
+	} else
 		goto err;
 
 
