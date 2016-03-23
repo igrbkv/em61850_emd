@@ -4,6 +4,7 @@
 
 #include "proto.h"
 #include "sv_read.h"
+#include "settings.h"
 
 #include "debug.h"
 #ifdef DEBUG
@@ -22,242 +23,6 @@ static double calc_abs_phi(const double *data_complex, double t_samp, int i, int
 static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp); 
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
 static void dfour1(double data[], unsigned int nn2, int isign);
-
-#if 0
-struct calc_result {
-	double rms;
-	double abs_phi;
-};
-
-// @param  ab:
-// @param  u: 1/0 potential/current  
-// @return - size of data(sizeof(struct u_ab) + sizeof(values))
-int make_ui_ab(struct ui_ab **ab, int u)
-{
-	int len;
-	struct timeval ts;
-	sv_data *s1;
-	int s1_size;
-
-	sv_get_ready(&ts, &s1, &s1_size, NULL, NULL);
-
-	if (s1_size == 0)
-		return 0;
-
-	len = sizeof(struct ui_ab);
-	*ab = malloc(len);
-	(*ab)->ts = ts;
-
-	struct calc_result calc_res;
-	double *values;
-	values = calloc(s1_size, sizeof(double));
-	for (int i = 0; i < s1_size; i++)
-		values[i] = u? (double)s1[i].ua: (double)s1[i].ia;
-
-	do_calculations(values, s1_size, &calc_res);
-	(*ab)->rms_a = calc_res.rms;
-	(*ab)->abs_phi_a = calc_res.abs_phi;
-
-	for (int i = 0; i < s1_size; i++)
-		values[i] = u? (double)s1[i].ub: (double)s1[i].ib;
-
-	do_calculations(values, s1_size, &calc_res);
-	(*ab)->rms_b = calc_res.rms;
-	(*ab)->abs_phi_b = calc_res.abs_phi;
-
-#ifdef DEBUG
-	FILE *fp = fopen(u? "dump_uab": "dump_iab", "a");
-	fprintf(fp, "************************\n");
-	fprintf(fp, "time stamp:%lu.%06lu\nrms_a:%.8f phi_a:%.8f deg\nrms_b:%.8f phi_b:%.8f deg\n", ts.tv_sec, ts.tv_usec, (*ab)->rms_a, (*ab)->abs_phi_a*180./M_PI, (*ab)->rms_b, (*ab)->abs_phi_b*180./M_PI);
-
-	for (int i = 0; i < s1_size; i++) {
-		fprintf(fp, "%d: %d, %d\n", i, u? s1[i].ua: s1[i].ia, u? s1[i].ub: s1[i].ib);
-	}
-
-	fclose(fp);
-#endif
-
-	free(values);
-	free(s1);
-
-	return len; 
-}
-
-// @param ui_a_ui_a:
-// @param  u: 1/0 potential/current  
-// @return - size of data(sizeof(struct ui_a_ui_a) + sizeof(values))
-int make_ui_a_ui_a(struct ui_a_ui_a **aa, int u)
-{
-	int len;
-	struct timeval ts;
-	sv_data *s1, *s2;
-	int s1_size, s2_size;
-
-	sv_get_ready(&ts, &s1, &s1_size, &s2, &s2_size);
-
-	if (s1_size == 0 && s2_size == 0)
-		return 0;
-
-
-	len = sizeof(struct ui_a_ui_a);
-	*aa = malloc(len);
-	memset(*aa, 0, len);
-
-	if (s1_size)
-		(*aa)->flags |= STREAM1_OK;
-	if (s2_size)
-		(*aa)->flags |= STREAM2_OK;
-
-	(*aa)->ts = ts;
-
-	struct calc_result calc_res;
-	double *values;
-	values = calloc(s1_size > s2_size? s1_size: s2_size, sizeof(double));
-
-	if (s1_size) {
-		for (int i = 0; i < s1_size; i++)
-			values[i] = u? (double)s1[i].ua: (double)s1[i].ia;
-
-		do_calculations(values, s1_size, &calc_res);
-		(*aa)->rms_a1 = calc_res.rms;
-		(*aa)->abs_phi_a1 = calc_res.abs_phi;
-	}
-	
-	if (s2_size) {
-		for (int i = 0; i < s2_size; i++)
-			values[i] = u? (double)s2[i].ua: (double)s2[i].ia;
-
-		do_calculations(values, s2_size, &calc_res);
-		(*aa)->rms_a2 = calc_res.rms;
-		(*aa)->abs_phi_a2 = calc_res.abs_phi;
-	}
-
-#ifdef DEBUG
-	FILE *fp = fopen(u? "dump_ua_ua": "dump_ia_ia", "a");
-	fprintf(fp, "************************\n");
-	fprintf(fp, "time stamp:%lu.%06lu\nrms1:%.8f phi1:%.8f deg\nrms2:%.8f phi2:%.8f deg\n", ts.tv_sec, ts.tv_usec, (*aa)->rms_a1, (*aa)->abs_phi_a1*180./M_PI, (*aa)->rms_a2, (*aa)->abs_phi_a2*180./M_PI);
-	if (s1_size == s2_size)
-		for (int i = 0; i < s1_size; i++)
-			fprintf(fp, "%d,%d,%d\n", i, u? s1[i].ua: s1[i].ia,  u? s2[i].ua: s2[i].ia);
-	else {
-		if (s1_size) {
-			fprintf(fp, "111111111111111111111111\n");
-			for (int i = 0; i < s1_size; i++)
-				fprintf(fp, "%d: %d\n", i, u? s1[i].ua: s1[i].ia);
-		}
-
-		if (s2_size) {
-			fprintf(fp, "222222222222222222222222\n");
-			for (int i = 0; i < s2_size; i++)
-				fprintf(fp, "%d: %d\n", i, u? s2[i].ua: s2[i].ia);
-		}
-	}
-
-	fclose(fp);
-#endif
-
-	if (s1_size)
-		free(s1);
-	if (s2_size)
-		free(s2);
-	free(values);
-
-	return len; 
-}
-
-void do_calculations(double *data, int len, struct calc_result *calc_res) 
-{
-	int v_size = len - EQ_TRAILS;
-	double *data_complex_out;
-	// FIXME if len = 1 sec
-	double t_samp = 1./len;
-	
-	data_complex_out = calloc(len*2, sizeof(double));
-	double *hanning_full = calloc(v_size, sizeof(double));
-	double *data_wh = calloc(v_size, sizeof(double));
-	double *tmp_data = calloc(len*2, sizeof(double));
-	// synt hanning
-	for (int i = 0, k = -(v_size -1); i < v_size; i++, k+=2) {
-		hanning_full[i] = (1. + cos(M_PI/v_size*k))/v_size;
-	}
-
-	// calc RMS
-	double rect_mean_h = 0.0,
-		   rms_wh = 0.0,
-		   mean_wh = 0.0,
-		   ampl = data[0];
-
-	double *data_wh_wz = tmp_data;	   
-	memset(data_wh_wz, 0, len*2 * sizeof(double));
-
-	for (int i = 0; i < v_size; i++) {
-		rect_mean_h += fabs(data[ i ] * hanning_full[ i ]);
-		rms_wh += hanning_full[ i ] * data[ i ] * data[ i ];		
-		mean_wh += hanning_full[ i ] * data[ i ];
-		data_wh[i] = data[ i ] * hanning_full[ i ];
-		if (data[i] > ampl)
-			ampl = data[i];
-
-		data_wh_wz[i*2] = data_wh[i] ;
-	}
-	rms_wh = sqrt(rms_wh);
-
-	calc_res->rms = rms_wh;
-
-	// преобр Фурье
-	general_transform(data_wh_wz, data_complex_out, len, 1);
-
-	// ampl spectre
-	double *ampl_spectre = tmp_data;
-	memset(ampl_spectre, 0, len*2*sizeof(double));
-	for (int i = 0; i < 2*len; i+= 2)
-		ampl_spectre[i/2] = sqrt(pow(data_complex_out[i], 2) + pow(data_complex_out[i + 1], 2));
-
-	// rev_win_han
-	double ar[3];
-
-	int i_max = rev_win_han_scan(ampl_spectre, 3, len / 2 - 1, ar, len, t_samp);
-
-	calc_res->abs_phi = calc_abs_phi(data_complex_out, t_samp, i_max, len);
-
-	ar[ 0 ] *= Kf;
-	
-	const int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
-	const int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
-
-	for	(int i = 2; i < max_harm; i++) {
-		int idx = len * t_samp * ar[0] * i + 0.5;
-		
-		double ar_cur[3];		
-			i_max = rev_win_han_scan(ampl_spectre.data(), idx - 1, idx + 1, ar_cur, gbIvFilter.s_s, tSamp);
-
-		harmonics_freq.push_back(ar_cur[ 0 ]);
-		harmonics_coef.push_back(ar_cur[ 1 ]);
-		harmonics_ampl.push_back(ar_cur[ 2 ]);
-	}
-
-	//qDebug( "Harmonics 4" );
-
-	channelData->harmonicsFreq = harmonics_freq;
-	channelData->harmonicsAmpl = harmonics_ampl;
-	channelData->harmonicsCoef = harmonics_coef;
-
-	//qDebug( "Before THD" );
-
-	double THD_cur = 0.0;
-	for(int i = 2; i < max_harm; i++) {
-		THD_cur += pow(harmonics_ampl[ i ], 2);
-	}
-	THD_cur = 100 * sqrt(THD_cur)/ harmonics_ampl[ 1 ];
-
-
-
-	free(data_complex_out);
-	free(hanning_full);
-	free(data_wh);
-	free(tmp_data);
-}
-#endif
 
 // @param idx1: idx of signal of stream 1
 // @param idx2: idx of signal of stream 1 or 2
@@ -319,81 +84,81 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1,
 		do_calculations(values, s2_size, c2, c2_size);
 	}
 
-#ifdef DEBUG
-	// TODO add harmonics
-	char buf[32];
-	char *sig_names[] = {
-		"Stream1 Ia",
-		"Stream1 Ib",
-		"Stream1 Ic",
-		"Stream1 In",
-		"Stream1 Ua",
-		"Stream1 Ub",
-		"Stream1 Uc",
-		"Stream1 Un",
-		"Stream2 Ia",
-		"Stream2 Ib",
-		"Stream2 Ic",
-		"Stream2 In",
-		"Stream2 Ua",
-		"Stream2 Ub",
-		"Stream2 Uc",
-		"Stream2 Un",
-	};
-	snprintf(buf, sizeof(buf), "dump_%d_%d", idx1, idx2);
-	FILE *fp = fopen(buf, "a");
-	fprintf(fp, "************************\n");
-	fprintf(fp, "time stamp:%lu.%06lu\n", ts->tv_sec, ts->tv_usec);
-	fprintf(fp, "Signal: %s =======\n", sig_names[idx1]);
-	if (*c1_size) {
-		fprintf(fp, "rms:%.8f dc:%.8f f_1h:%.8f rms_1h:%.8f phi:%.8f deg thd:%.8f\n", 
-			(*c1)->rms,
-			(*c1)->dc,
-			(*c1)->f_1h,
-			(*c1)->rms_1h,
-			(*c1)->phi*180./M_PI,
-			(*c1)->thd);
-	}
-	fprintf(fp, "Signal: %s =======\n", sig_names[idx2]);
-	if (*c2_size) {
-		fprintf(fp, "rms:%.8f dc:%.8f f_1h:%.8f rms_1h:%.8f phi:%.8f deg thd:%.8f\n", 
-			(*c2)->rms,
-			(*c2)->dc,
-			(*c2)->f_1h,
-			(*c2)->rms_1h,
-			(*c2)->phi*180./M_PI,
-			(*c2)->thd);
-	}
+	if (dump) {
+		// TODO add harmonics
+		char buf[128];
+		char *sig_names[] = {
+			"Stream1_Ia",
+			"Stream1_Ib",
+			"Stream1_Ic",
+			"Stream1_In",
+			"Stream1_Ua",
+			"Stream1_Ub",
+			"Stream1_Uc",
+			"Stream1_Un",
+			"Stream2_Ia",
+			"Stream2_Ib",
+			"Stream2_Ic",
+			"Stream2_In",
+			"Stream2_Ua",
+			"Stream2_Ub",
+			"Stream2_Uc",
+			"Stream2_Un",
+		};
+		snprintf(buf, sizeof(buf), "/tmp/dump_%d_%d", sig_names[idx1], sig_names[idx2]);
+		FILE *fp = fopen(buf, "a");
+		fprintf(fp, "************************\n");
+		fprintf(fp, "time stamp:%lu.%06lu\n", ts->tv_sec, ts->tv_usec);
+		fprintf(fp, "Signal: %s =======\n", sig_names[idx1]);
+		if (*c1_size) {
+			fprintf(fp, "rms:%.8f dc:%.8f f_1h:%.8f rms_1h:%.8f phi:%.8f deg thd:%.8f\n", 
+				(*c1)->rms,
+				(*c1)->dc,
+				(*c1)->f_1h,
+				(*c1)->rms_1h,
+				(*c1)->phi*180./M_PI,
+				(*c1)->thd);
+		}
+		fprintf(fp, "Signal: %s =======\n", sig_names[idx2]);
+		if (*c2_size) {
+			fprintf(fp, "rms:%.8f dc:%.8f f_1h:%.8f rms_1h:%.8f phi:%.8f deg thd:%.8f\n", 
+				(*c2)->rms,
+				(*c2)->dc,
+				(*c2)->f_1h,
+				(*c2)->rms_1h,
+				(*c2)->phi*180./M_PI,
+				(*c2)->thd);
+		}
 
-	if (s1_size == s2_size)
-		for (int i = 0; i < s1_size; i++)
-			fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
-	else {
-		if (s1_size) {
-			if (!stream2)
-				for (int i = 0; i < s1_size; i++)
-					fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s1[i].values[idx2 * 2]);
-			else {
-				fprintf(fp, "111111111111111111111111\n");
-				for (int i = 0; i < s1_size; i++)
-					fprintf(fp, "%8d: %8d\n", i, s1[i].values[idx1 * 2]);
+		if (s1_size == s2_size)
+			for (int i = 0; i < s1_size; i++)
+				fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+		else {
+			if (s1_size) {
+				if (!stream2)
+					for (int i = 0; i < s1_size; i++)
+						fprintf(fp, "%8d,%8d,%8d\n", i, s1[i].values[idx1 * 2],  s1[i].values[idx2 * 2]);
+				else {
+					fprintf(fp, "111111111111111111111111\n");
+					for (int i = 0; i < s1_size; i++)
+						fprintf(fp, "%8d: %8d\n", i, s1[i].values[idx1 * 2]);
+				}
+			}
+
+			if (s2_size) {
+				if (!stream1)
+					for (int i = 0; i < s2_size; i++)
+						fprintf(fp, "%8d,%8d,%8d\n", i, s2[i].values[idx1 % STREAM2_START_IDX * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+				else {
+					fprintf(fp, "222222222222222222222222\n");
+					for (int i = 0; i < s2_size; i++)
+						fprintf(fp, "%8d: %8d\n", i, s2[i].values[idx2 % STREAM2_START_IDX * 2]);
+				}
 			}
 		}
 
-		if (s2_size) {
-			if (!stream1)
-				for (int i = 0; i < s2_size; i++)
-					fprintf(fp, "%8d,%8d,%8d\n", i, s2[i].values[idx1 % STREAM2_START_IDX * 2],  s2[i].values[idx2 % STREAM2_START_IDX * 2]);
-			else {
-				fprintf(fp, "222222222222222222222222\n");
-				for (int i = 0; i < s2_size; i++)
-					fprintf(fp, "%8d: %8d\n", i, s2[i].values[idx2 % STREAM2_START_IDX * 2]);
-			}
-		}
+		fclose(fp);
 	}
-
-	fclose(fp);
-#endif
 
 	if (s1_size)
 		free(s1);

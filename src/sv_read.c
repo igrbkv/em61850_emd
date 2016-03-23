@@ -102,6 +102,7 @@ struct _sv_header {
 typedef struct _sv_header sv_header;
 
 char emd_mac[17];	
+int dump;
 static char ifname[IF_NAMESIZE];
 
 static sv_data_second *ready;

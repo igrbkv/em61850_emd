@@ -171,70 +171,6 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 			break;
 		}
-#if 0
-		case GET_U_AB_REQ: 
-		case GET_I_AB_REQ: {
-			if (hdr->data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_X_AB_REQ error data size!");
-				return -1;
-			}
-			ui_ab_resp *ab;
-			int ret = make_ui_ab(&ab, hdr->msg_code == GET_U_AB_REQ? 1: 0);
-			if (ret == 0)
-				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
-			else {
-				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
-				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(ret);
-				ui_ab_resp *data = (ui_ab_resp *)resp->data;
-				*data = *ab;
-				free(ab);
-				uint64_t *v = (uint64_t *)&data->rms_a;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->abs_phi_a;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->rms_b;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->abs_phi_b;
-				*v = htobe64(*v);
-
-				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + ret;
-			}
-			break;
-		} 
-		case GET_UA_UA_REQ: 
-		case GET_IA_IA_REQ: {
-			if (hdr->data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_XA_XA_REQ error data size!");
-				return -1;
-			}
-			ui_a_ui_a_resp *aa;
-			int ret = make_ui_a_ui_a(&aa, hdr->msg_code == GET_UA_UA_REQ? 1: 0);
-			if (ret == 0)
-				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
-			else {
-				pdu_t *resp = malloc(sizeof(pdu_t) + ret);
-				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(ret);
-				ui_a_ui_a_resp *data = (ui_a_ui_a_resp *)resp->data;
-				*data = *aa;
-				free(aa);
-				uint64_t *v = (uint64_t *)&data->rms_a1;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->abs_phi_a1;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->rms_a2;
-				*v = htobe64(*v);
-				v = (uint64_t *)&data->abs_phi_a2;
-				*v = htobe64(*v);
-
-				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + ret;
-			}
-			break;
-		} 
-#endif
 		case GET_CALC_REQ: {
 			if (hdr->data_len != sizeof(struct calc_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
@@ -254,8 +190,8 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				resp->msg_code = hdr->msg_code;
 				resp->data_len = htons(len);
 				struct calc *clc = (struct calc *)resp->data;
-				clc->ts_sec = ts.tv_sec; //htobe64(ts.tv_sec);
-				clc->ts_usec = ts.tv_usec; //htobe64(ts.tv_usec);
+				clc->ts_sec = ts.tv_sec;	//htobe64(ts.tv_sec);
+				clc->ts_usec = ts.tv_usec;	//htobe64(ts.tv_usec);
 				clc->valid1 = c1_size != 0;
 				clc->valid2 = c2_size != 0;
 				if (c1_size != 0) {
@@ -287,6 +223,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 void calc_results_to_be64(struct calc_results *cr)
 {
+	// FIXME Не работает обратное приведение в андроиде
+	// Попробовать здесь и в андроиде 
+	// 1. добалять по одному элементу
+	// 2. использовать промежуточную переменную для
+	// результата преобразования
 	return;
 	uint64_t *v = (uint64_t *)&cr->rms;
 	*v = htobe64(*v);

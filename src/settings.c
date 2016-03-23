@@ -28,12 +28,14 @@
  * X_trans_coef_streamN = 1 - по умолчанию
  */
 
+int dump;
 unsigned short emd_port;
 struct streams_properties streams_prop; 
 
 void set_default_settings()
 {
 	emd_port = EMD_PORT;
+	dump = 0;
 	streams_prop.stream1 = 0;
 	streams_prop.mac1[0] = '\0';
 	streams_prop.sv_id1[0] = '\0';
@@ -101,6 +103,8 @@ int emd_read_conf(const char *file)
 			emd_debug = atoi(val);
 		} else if (!strcasecmp(key, "port")) {
 			emd_port = atoi(val);
+		} else if (!strcasecmp(key, "dump")) {
+			dump = atoi(val);
 		} else if (!strcasecmp(key, "external_stream1")) {
 			streams_prop.stream1 = atoi(val);
 		} else if (!strcasecmp(key, "external_stream2")) {
