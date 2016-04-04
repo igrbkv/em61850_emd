@@ -25,12 +25,6 @@ enum REQ_CODES {
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
-#if 0
-	GET_U_AB_REQ,
-	GET_UA_UA_REQ,
-	GET_I_AB_REQ,
-	GET_IA_IA_REQ,
-#endif
 	GET_CALC_REQ,
 };
 
@@ -107,30 +101,6 @@ struct __attribute__((__packed__)) streams_properties {
 
 typedef struct streams_properties streams_prop_resp;
 
-#if 0
-struct __attribute__((__packed__)) ui_ab {
-	struct timeval ts;
-	double rms_a;
-	double abs_phi_a;
-	double rms_b;
-	double abs_phi_b;
-	float values[];
-}; 
-
-typedef struct ui_ab ui_ab_resp;
-
-struct __attribute__((__packed__)) ui_a_ui_a {
-	struct timeval ts;
-	uint8_t flags;	// STREAM1_OK & STREAM2_OK
-	double rms_a1;
-	double abs_phi_a1;
-	double rms_a2;
-	double abs_phi_a2;
-	float values[];
-}; 
-
-typedef struct ui_a_ui_a ui_a_ui_a_resp;
-#endif 
 
 #define STREAM2_START_IDX 8
 #define I_START_IDX 0

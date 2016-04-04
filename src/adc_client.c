@@ -17,12 +17,12 @@
 #include "settings.h"
 #include "adc_client.h"
 
-//#include "debug.h"
 
 #define DEFAULT_ADC_PORT 1234
 #define DEFAULT_ADC_IP4_ADDRESS "192.168.0.2"
 
 #define RECV_BUF_SIZE 1512
+#define SEND_RECV_RETRY 10 
 
 enum SV_DISCRETE {
 	SV_DISCRETE_80 = 0,
@@ -62,7 +62,7 @@ enum I_RANGE {
 
 
 uint16_t adc_port;
-char *adc_ip4_address; 
+char *adc_ip4_address;
 struct adc_properties adc_prop;
 int adc_prop_valid = 0;
 
@@ -90,8 +90,8 @@ int adc_client_init()
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock == -1) {
-		emd_log(LOG_DEBUG, "Error to open socket: %s", strerror(errno));
-		return -1;
+            emd_log(LOG_DEBUG, "Error to open socket: %s", strerror(errno));
+            return -1;
 	}
 
 	memset(&local, 0, sizeof(local));
@@ -105,22 +105,23 @@ int adc_client_init()
 	remote.sin_port = htons(adc_port);
 
 	if (bind(sock, (struct sockaddr *)&local, sizeof(local)) == -1) {
-		emd_log(LOG_DEBUG, "Error to bind socket: %s", strerror(errno));
-		return -1;
+            emd_log(LOG_DEBUG, "Error to bind socket: %s", strerror(errno));
+            return -1;
 	}
 
 	struct timespec tv = (struct timespec){1, 0};
 
 	if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
-		emd_log(LOG_DEBUG, "setsockopt(SO_SNDTIMEO) failed: %s", strerror(errno));
-		return -1;
+            emd_log(LOG_DEBUG, "setsockopt(SO_SNDTIMEO) failed: %s", strerror(errno));
+            return -1;
 	}
 
 	if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1)
 	{
-		emd_log(LOG_DEBUG, "setsockopt(SO_RCVTIMEO) failed: %s", strerror(errno));
-		return -1;
+            emd_log(LOG_DEBUG, "setsockopt(SO_RCVTIMEO) failed: %s", strerror(errno));
+            return -1;
 	}
+    
 
 	pcount = 0;
 	adc_prop_valid = (read_properties() != -1);
@@ -147,7 +148,7 @@ int set_adc_prop(struct adc_properties *prop)
 	char resp[256];
 	char tag;
 	char buf[32];
-		
+
 	// write ranges
 	for (int i = 0; i < 8; i++) {
 		if (adc_prop.range[i] != prop->range[i]) {
@@ -163,14 +164,14 @@ int set_adc_prop(struct adc_properties *prop)
 				goto err;
 		}
 	}
-	
+
 	// write macs
 	if (memcmp(adc_prop.dst_mac, prop->dst_mac, 17) != 0) {
 		req[0] = 0;
 		memcpy(buf, prop->dst_mac, 17);
 		buf[17] = '\0';
 		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&req[1], &req[2], &req[3], 
+			&req[1], &req[2], &req[3],
 			&req[4], &req[5], &req[6]);
 		if ((ret = adc_send_recv(0xb4, req, 7, &tag, resp, sizeof(resp))) == -1)
 			goto err1;
@@ -184,7 +185,7 @@ int set_adc_prop(struct adc_properties *prop)
 		memcpy(buf, prop->src_mac, 17);
 		buf[17] = '\0';
 		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&req[1], &req[2], &req[3], 
+			&req[1], &req[2], &req[3],
 			&req[4], &req[5], &req[6]);
 		if ((ret = adc_send_recv(0xba, req, 7, &tag, resp, sizeof(resp))) == -1)
 			goto err1;
@@ -208,7 +209,7 @@ int set_adc_prop(struct adc_properties *prop)
 			goto err1;
 		if (tag == 0x32 && resp[0] == 0x01) {
 			strncpy(adc_prop.sv_id, prop->sv_id, SV_ID_MAX_LEN);
-			adc_prop.sv_id[SV_ID_MAX_LEN] = '\0';
+			adc_prop.sv_id[SV_ID_MAX_LEN-1] = '\0';
 		} else
 			goto err;
 	}
@@ -243,12 +244,12 @@ int adc_send_recv(char out_tag, char *out_value, int out_len, char *in_tag, char
 	int out_buf_len = out_len, in_buf_len = 0;
 	uint8_t tag;
 	uint16_t ccount;
-	
+
 	out_buf = malloc(out_len);
 	memcpy(out_buf, out_value, out_len);
 
 	if (encode(pcount++, out_tag, (uint8_t **)&out_buf, &out_buf_len) == -1) {
-		emd_log(LOG_DEBUG, "encode() failed: %s", strerror(errno));	
+		emd_log(LOG_DEBUG, "encode() failed: %s", strerror(errno));
 		goto err;
 	}
 
@@ -265,7 +266,7 @@ int adc_send_recv(char out_tag, char *out_value, int out_len, char *in_tag, char
 
 	if (in_tag)
 		*in_tag = tag;
-	if (in_value) 
+	if (in_value)
 		memcpy(in_value, in_buf, ret);
 
 err:
@@ -292,7 +293,7 @@ int read_properties()
 			return -1;
 
 		if (tag == 0x32 && ret == 3)
-			adc_prop.range[i] = resp[2];	
+			adc_prop.range[i] = resp[2];
 		else
 			goto err;
 	}
@@ -300,45 +301,45 @@ int read_properties()
 	// read macs
 	req[0] = 0;
 	if ((ret = adc_send_recv(0xbb, req, 1, &tag, resp, sizeof(resp))) == -1)
-		return -1;
+            return -1;
 	if (tag == 0x32 && ret == 6) {
-		char buf[32];
-		snprintf(buf, sizeof(buf),  "%02X:%02X:%02X:%02X:%02X:%02X", 
-			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
-		memcpy(adc_prop.src_mac, buf, 17);
+            char buf[32];
+            snprintf(buf, sizeof(buf),  "%02X:%02X:%02X:%02X:%02X:%02X",
+                    (uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
+            memcpy(adc_prop.src_mac, buf, 17);
 	} else
-		goto err;
+            goto err;
 
 	if ((ret = adc_send_recv(0xb5, req, 1, &tag, resp, sizeof(resp))) == -1)
-		return -1;
+            return -1;
 	if (tag == 0x32 && ret == 6) {
-		char buf[32];
-		snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", 
-			(uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
-		memcpy(adc_prop.dst_mac, buf, 17);
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
+                    (uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
+            memcpy(adc_prop.dst_mac, buf, 17);
 	} else
-		goto err;
+            goto err;
 
 
 	// sv_id
 	if ((ret = adc_send_recv(0xb9, req, 1, &tag, resp, sizeof(resp))) == -1)
-		return -1;
+            return -1;
 	if (tag == 0x31) {
-		ret = ret < SV_ID_MAX_LEN - 1? ret: SV_ID_MAX_LEN - 1;
-		memcpy(adc_prop.sv_id, resp, ret);
-		adc_prop.sv_id[ret] = '\0';
+            ret = ret < SV_ID_MAX_LEN - 1? ret: SV_ID_MAX_LEN - 1;
+            memcpy(adc_prop.sv_id, resp, ret);
+            adc_prop.sv_id[ret] = '\0';
 	} else
-		goto err;
-	
+            goto err;
+
 	// rate
 	if ((ret = adc_send_recv(0xb3, req, 1, &tag, resp, sizeof(resp))) == -1)
-		return -1;
+            return -1;
 	if (tag == 0x32 && ret == 2)
-		adc_prop.rate = resp[1];
+            adc_prop.rate = resp[1];
 	else
-		goto err;
+            goto err;
 
-	return 0;	
+	return 0;
 err:
 	emd_log(LOG_DEBUG, "adc request rejected");
 	return -1;
@@ -347,28 +348,35 @@ err:
 int adc_sock_send_recv(void *out, int out_len, void **in, int *in_len)
 {
 	socklen_t sl;
+    int errn;
+    int retry = 0;
+    ssize_t sz;
 
-	if (sendto(sock, out, out_len, 0, (const struct sockaddr *)&remote, sizeof(remote)) == -1) {
-#ifdef DEBUG
-		emd_log(LOG_DEBUG, "sendto failed:(%d) %s", errno, strerror(errno));
-#endif
-		return -1;
-	}
+    for (; retry < SEND_RECV_RETRY; retry++) {
+    
+        if (sendto(sock, out, out_len, 0, (const struct sockaddr *)&remote, sizeof(remote)) == -1) {
+            errn = errno;
+            emd_log(LOG_DEBUG, "sendto failed:(%d) %s", errno, strerror(errno));
+            if (errn == 11)
+                continue;
+            return -1;
+        }
 
-	ssize_t sz;
-	if ((sz = recvfrom(sock, recv_buf, RECV_BUF_SIZE, 0, NULL, &sl)) == -1) {
-#ifdef DEBUG
-		emd_log(LOG_WARNING,"recvfrom failed:(%d) %s", errno, strerror(errno));
-#endif
-		return -1;
-	}
+        if ((sz = recvfrom(sock, recv_buf, RECV_BUF_SIZE, 0, NULL, &sl)) == -1) {
+            errn = errno;
+            emd_log(LOG_WARNING,"recvfrom failed:(%d) %s", errno, strerror(errno));
+            if (errn == 11)
+                continue;
+            return -1;
+        }
+    }
 
 	if (in) {
-		*in = malloc(sz);
-		memcpy(*in, recv_buf, sz);
+        *in = malloc(sz);
+        memcpy(*in, recv_buf, sz);
 	}
 	if (in_len)
-		*in_len = sz;
+            *in_len = sz;
 
 	return 0;
 }
@@ -377,17 +385,17 @@ int adc_client_close()
 {
 	adc_port = 0;
 	if (adc_ip4_address) {
-		free(adc_ip4_address);
-		adc_ip4_address = NULL;
+            free(adc_ip4_address);
+            adc_ip4_address = NULL;
 	}
 	if (recv_buf) {
-		free(recv_buf);
-		recv_buf = NULL;
+            free(recv_buf);
+            recv_buf = NULL;
 	}
 
 	if (sock != -1) {
-		close(sock);
-		sock = -1;
+            close(sock);
+            sock = -1;
 	}
 
 	return 0;

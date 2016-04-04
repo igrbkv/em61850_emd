@@ -23,6 +23,7 @@ static double calc_abs_phi(const double *data_complex, double t_samp, int i, int
 static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp); 
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
 static void dfour1(double data[], unsigned int nn2, int isign);
+static double scaleFactor(int idx);
 
 // @param idx1: idx of signal of stream 1
 // @param idx2: idx of signal of stream 1 or 2
@@ -46,17 +47,19 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1,
 	double *values = calloc(s1_size > s2_size? s1_size: s2_size, sizeof(double));
 
 	if (s1_size) {
+		double sf = scaleFactor(idx1);
 		for (int i = 0; i < s1_size; i++) {
 			int v = s1[i].values[idx1*2];
-			values[i] = (double)v;
+			values[i] = sf*(double)v;
 		}
 
 		do_calculations(values, s1_size, c1, c1_size);
 
 		if (!stream2) {
+			double sf = scaleFactor(idx2);
 			for (int i = 0; i < s1_size; i++) {
 				int v = s1[i].values[idx2*2];
-				values[i] = (double)v;
+				values[i] = sf*(double)v;
 			}
 
 			do_calculations(values, s1_size, c2, c2_size);
@@ -67,18 +70,20 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1,
 		int idx;
 		if (!stream1) {
 			idx = idx1 % STREAM2_START_IDX;
+			double sf = scaleFactor(idx);
 			for (int i = 0; i < s2_size; i++) {
 				int v = s2[i].values[idx*2];
-				values[i] = (double)v;
+				values[i] = sf*(double)v;
 			}
 
 			do_calculations(values, s2_size, c1, c1_size);
 		}
 
 		idx = idx2 % STREAM2_START_IDX;
+		double sf = scaleFactor(idx);
 		for (int i = 0; i < s2_size; i++) {
 			int v = s2[i].values[idx*2];
-			values[i] = (double)v;
+			values[i] = sf*(double)v;
 		}
 
 		do_calculations(values, s2_size, c2, c2_size);
@@ -165,6 +170,11 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1,
 	if (s2_size)
 		free(s2);
 	free(values);
+}
+
+double scaleFactor(int idx)
+{
+	return idx%STREAM2_START_IDX < PHASES_NUM? 0.001: 0.01;
 }
 
 void do_calculations(double *data, int len, struct calc_results **calc_res, int *calc_size) 

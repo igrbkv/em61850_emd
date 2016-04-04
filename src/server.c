@@ -15,7 +15,7 @@
 
 #define MAX_DIFF_TIME 2
 
-
+static int time_updated = 0; // Время усанавливается по планшету один раз за сессию
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void calc_results_to_be64(struct calc_results *cr);
@@ -262,7 +262,8 @@ void apply_time(int32_t client_time)
 	
 	struct timeval tv = {client_time, 0};
 	// FIXME reset the sv reading
-#if 0
-	settimeofday(&tv, NULL);
-#endif
+	if (!time_updated) {
+		settimeofday(&tv, NULL);
+		time_updated = 1;
+	}
 }

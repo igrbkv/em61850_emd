@@ -148,7 +148,7 @@ void clean_exit_with_status(int status)
 
 static void clean_exit(int sig)
 {
-	emd_log(LOG_NOTICE, "clean exit");
+	emd_log(LOG_NOTICE, "clean exit: %d", sig);
 	clean_exit_with_status(EXIT_SUCCESS);
 }
 
