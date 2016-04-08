@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
 #include <pcap.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -93,15 +94,12 @@ typedef struct {
 } statistic;
 
 struct _sv_header {
-	struct ether_header eh;
-	u_int16_t vlan_id;
-	u_int16_t type;
 	u_int16_t app_id;
 	u_int16_t len;
+	u_int16_t null[2];
 } __attribute__ ((__packed__));
 typedef struct _sv_header sv_header;
 
-char emd_mac[17];	
 int dump;
 static char ifname[IF_NAMESIZE];
 
@@ -141,7 +139,6 @@ static void print_statistic(bool finish);
 int sv_read_init()
 {
 	emd_log(LOG_INFO, "sv_read_init");
-	emd_mac[0] = '\0';
 	ifname[0] = '\0';
 	pcap_if_t *alldevs;
 	pcap_findalldevs(&alldevs, errbuf);
@@ -163,36 +160,6 @@ int sv_read_init()
 	if (ifname[0] == '\0') {
 		emd_log(LOG_ERR, "pcap did not find iface device");
 		return -1;
-	} else {
-		int fd;
-		struct ifreq ifr;
-
-		memset(&ifr, 0, sizeof(ifr));
-		if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-			emd_log(LOG_DEBUG, "socket() failed: %s", strerror(errno));
-			ifname[0] ='\0';
-			return -1;
-		}
-		ifr.ifr_addr.sa_family = AF_INET;
-		strncpy(ifr.ifr_name , ifname , IF_NAMESIZE-1);
-		if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1) {
-			emd_log(LOG_DEBUG, "ioctl() failed: %s", strerror(errno));
-			ifname[0] = '\0';
-			close(fd);
-			return -1;
-		} else {
-			char buf[32];
-			snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-				(uint8_t)ifr.ifr_hwaddr.sa_data[0],
-				(uint8_t)ifr.ifr_hwaddr.sa_data[1],
-				(uint8_t)ifr.ifr_hwaddr.sa_data[2],
-				(uint8_t)ifr.ifr_hwaddr.sa_data[3],
-				(uint8_t)ifr.ifr_hwaddr.sa_data[4],
-				(uint8_t)ifr.ifr_hwaddr.sa_data[5]);
-			memcpy(emd_mac, buf, 17);
-		}
-
-		close(fd);
 	}
 
 	ready =(sv_data_second *)calloc(2*2, sizeof(sv_data_second));
@@ -271,48 +238,55 @@ int read_start()
 #endif
 	}
 
-	int used = 0;
-	if (streams_prop.stream1 == 0) {
-		if (memcmp(emd_mac, adc_prop.dst_mac, 17) == 0)
-			used = 1;
-	} else
-		used = 1;
-	
-	if (!used && streams_prop.stream2 == 1) 
-		used = 1;
-
-	if (!used)
-		return 0;
-
 	char *filter = NULL;
-	char smac1[17+1] = {0}, smac2[17+1] = {0};
+	char dst_mac1[17+1] = {0}, dst_mac2[17+1] = {0};
+	char src_mac1[17+1] = {0}, src_mac2[17+1] = {0};
 	char *fmt[] = {
-		"vlan 32768 and ether dst %s",
-		"vlan 32768 and ether dst %s and ether src %s",
-		"vlan 32768 and ether dst %s and (ether src %s or ether src %s)"
+		"ether multicast and (vlan or ether proto 35002) and ether dst %s",
+		"ether multicast and (vlan or ether proto 35002) and ether dst %s and ether src %s",
+		"ether multicast and (vlan or ether proto 35002) and ether dst %s and (ether src %s or ether src %s)",
+		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s)",
+		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s) and ether src %s",
+		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s) and (ether src %s or ether src %s)"
 	};
 	if (streams_prop.stream1 == 0) {
-		strncpy(smac1, adc_prop.src_mac, 17);
+		strncpy(src_mac1, adc_prop.src_mac, 17);
+		strncpy(dst_mac1, adc_prop.dst_mac, 17);
 		sv_id[0] = strdup(adc_prop.sv_id);
 	}
 	else {
 		sv_id[0] = strdup(streams_prop.sv_id1);
-		if (streams_prop.mac1[0] != '\0')
-			strncpy(smac1, streams_prop.mac1, 17);
+		strncpy(dst_mac1, streams_prop.dst_mac1, 17);
+		if (streams_prop.src_mac1[0] != '\0')
+			strncpy(src_mac1, streams_prop.src_mac1, 17);
 	}
 
 	if (streams_prop.stream2 == 1) {
 		sv_id[1] = strdup(streams_prop.sv_id2);
-		if (streams_prop.mac2[0] != '\0')
-			strncpy(smac1[0] == '\0'? smac1: smac2, streams_prop.mac2, 17);
+		strncpy(dst_mac2, streams_prop.dst_mac2, 17);
+		if (streams_prop.src_mac2[0] != '\0')
+			strncpy(src_mac2, streams_prop.src_mac2, 17);
 	}
 
-	if (smac1[0] && smac2[0])
-		asprintf(&filter, fmt[2], emd_mac, smac1, smac2);
-	else if (smac1[0])
-		asprintf(&filter, fmt[1], emd_mac, smac1);
-	else
-		asprintf(&filter, fmt[0], emd_mac);
+	if (strcasecmp(dst_mac1, dst_mac2) == 0)
+		dst_mac2[0] = '\0';
+
+	if (dst_mac1[0] && !dst_mac2[0]) {
+		if (!src_mac1[0] && !src_mac2[0])
+			asprintf(&filter, fmt[0], dst_mac1);
+		else if (src_mac1[0] && src_mac2[0])
+			asprintf(&filter, fmt[2], dst_mac1, src_mac1, src_mac2);
+		else
+			asprintf(&filter, fmt[1], dst_mac1, src_mac1[0]? src_mac1: src_mac2);
+	} else { 
+		// dst_mac1[0] && dst_mac2[0]
+		if (!src_mac1[0] && !src_mac2[0])
+			asprintf(&filter, fmt[3], dst_mac1, dst_mac2);
+		else if (src_mac1[0] && src_mac2[0])
+			asprintf(&filter, fmt[5], dst_mac1, dst_mac2, src_mac1, src_mac2);
+		else
+			asprintf(&filter, fmt[4], dst_mac1, dst_mac2, src_mac1[0]? src_mac1: src_mac2);	
+	}
 	
 	emd_log(LOG_INFO, "Filter: %s", filter);
 #ifdef LOCAL_DEBUG
@@ -370,16 +344,29 @@ void pcap_callback(u_char *useless,
 {
 	st->total++;
 
-	if (pkthdr->len < sizeof(sv_header)) {
+	if (pkthdr->len < sizeof(struct ether_header)) {
 		st->err_packet++;
 		return;
 	}
-	sv_header *svh = (sv_header *)packet;
-	int len = ntohs(svh->len);
-	if (ntohs(svh->type) != 0x88BA) {
+
+	struct ether_header *eh = (struct ether_header *)packet;
+	int off = 0;
+	u_int16_t type = ntohs(eh->ether_type);
+	if (type == 0x8100) {
+		type = ntohs(*(u_int16_t *)(packet + sizeof(*eh) + sizeof(u_int16_t)));
+		off = 4;
+	}
+	if (type != 0x88BA) {
+		st->err_type++;
+		return;
+	} 
+
+	sv_header *svh = (struct sv_header *)(packet + sizeof(*eh) + off);
+	if (ntohs(svh->app_id) != 0x4000) {
 		st->err_type++;
 		return;
 	}
+	int len = ntohs(svh->len);
 	
 	// в pdu индекс не меняется, потому достаточно
 	// взять первый и не сравнивать sv_id.
@@ -427,6 +414,8 @@ int parse_tlv(const u_char *p, int *size)
 		case T_NO_ASDU:
 			if (pdu->no_asdu == 0) {
 				pdu->no_asdu = *p;
+				// 1=>80 8=>256
+				pdu->rate = (*p == 1? 80: 256) * FREQUENCY;
 			}
 			else {/* case T_ID: */
 				if (idx != -1)

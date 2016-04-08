@@ -20,7 +20,6 @@
 enum REQ_CODES {
 	STATE_REQ = 1,
 	SET_TIME_REQ,
-	GET_MAC_REQ,
 	GET_ADC_PROP_REQ,
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
@@ -88,12 +87,14 @@ typedef struct adc_properties adc_prop_resp;
 
 struct __attribute__((__packed__)) streams_properties {
 	uint8_t stream1;
-	char mac1[17];
+	char src_mac1[17];
+	char dst_mac1[17];
 	char sv_id1[SV_ID_MAX_LEN];
 	uint32_t u_trans_coef1; 
 	uint32_t i_trans_coef1; 
 	uint8_t stream2;
-	char mac2[17];
+	char src_mac2[17];
+	char dst_mac2[17];
 	char sv_id2[SV_ID_MAX_LEN];
 	uint32_t u_trans_coef2; 
 	uint32_t i_trans_coef2; 

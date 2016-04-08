@@ -14,4 +14,5 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 int set_streams_prop(struct streams_properties *prop);
 
 extern int dump;
+extern int correct_time;
 #endif

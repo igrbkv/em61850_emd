@@ -15,7 +15,7 @@
 
 #define MAX_DIFF_TIME 2
 
-static int time_updated = 0; // Время усанавливается по планшету один раз за сессию
+int correct_time = 1; // Время усанавливается по планшету один раз за сессию
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void calc_results_to_be64(struct calc_results *cr);
@@ -80,24 +80,6 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 			*out = (void *)resp;
 			*out_len = sizeof(pdu_t) + sizeof(struct state_resp);
-			break;
-		}
-		case GET_MAC_REQ: {
-			if (hdr->data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_MAC_REQ error data size!");
-				return -1;
-			}
-			if (emd_mac[0] != '\0') {
-				pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(struct mac_resp));
-				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(sizeof(struct mac_resp));
-				struct mac_resp *data = (struct mac_resp *)resp->data;
-				memcpy(data->mac, emd_mac, 17); 
-				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + sizeof(struct mac_resp);
-			} else
-				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
-
 			break;
 		}
 		case GET_ADC_PROP_REQ: {
@@ -262,8 +244,8 @@ void apply_time(int32_t client_time)
 	
 	struct timeval tv = {client_time, 0};
 	// FIXME reset the sv reading
-	if (!time_updated) {
+	if (correct_time) {
 		settimeofday(&tv, NULL);
-		time_updated = 1;
+		correct_time = 0;
 	}
 }
