@@ -5,17 +5,24 @@
 #include <stdint.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <linux/if_alg.h>
 #include <sys/param.h>
 
 #define _BSD_SOURCE
 #include <endian.h>
 
-#include "adc_tlv.h"
+#include "tlv.h"
 #include "log.h"
 
-//#include "debug.h"
+
+#include "debug.h"
+
+enum PARSE_STATE {
+	PS_INITIAL,
+	PS_TAG,
+	PS_LEN,
+	PS_VALUE,
+	PS_CRC
+};
 
 #ifdef TLV_ALLOC_MEM
 static int break_tlv(uint8_t *tag, uint8_t **data, int *len);
@@ -190,6 +197,177 @@ int encode(uint16_t pcount, uint8_t tag, uint8_t **data, int *len)
 
 int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
 {
+	if (*len <= 0 || *data == NULL)
+		return 0;
+
+#ifdef DEBUG
+	char str[256];
+	print_buf(*data, *len, str, sizeof(str));
+	emd_log(LOG_DEBUG, "in stuff:%s", str);
+#endif
+
+	int i = 0, j = 0;
+	uint8_t *buf = *data;
+	int db = 0;
+	int buf_len = *len,
+		part_len,
+		value_len;
+	uint8_t *value_ptr, *crc_ptr;
+	int parsed = 0;
+
+	*len = -1;	// msg not found
+
+	PARSE_STATE ps = PS_INITIAL;
+	// msg parse
+	for (; !parsed && i < buf_len; i++) {
+		if (buf[i] == 0xC0) {
+			db = 0;
+			continue;
+		} else if (buf[i] == 0xDB) {
+			db = 1;
+			continue;
+		} else if (buf[i] == 0xDC && db) {
+			db = 0;
+			buf[j++] = 0xC0;
+		} else if (buf[i] == 0xDD && db) {
+			db = 0;
+			buf[j++] = 0xDB;
+		} else {
+			if (db) {
+				buf[j++] = 0xDB;
+				db = 0;
+			}
+			buf[j++] = buf[i];
+		}
+
+		uint8_t ch = buf[j-1];
+		switch (ps) {
+			case PS_INITIAL:
+				if (ch == 0x81)
+					ps = PS_TAG;
+				break;
+			case PS_TAG:
+				if (*ch & 0x80) {
+					part_len = (ch & 0x7f);
+					if (part_len > 4) {
+						ps = PS_INITIAL;
+						break;
+					}
+					value_len = 0;
+				} else {
+					part_len = 0;
+					value_len = ch;
+				}
+				ps = PS_LEN;
+				break;
+			case PS_LEN:
+				if (part_len == 0) {
+					ps = PS_VALUE;
+					part_len = value_len;
+					value_ptr = &buf[j];
+				} else {
+					value_len = value_len << 8 + ch;
+					part_len--;
+				}
+				break;
+			case PS_VALUE:
+				if (part_len == 0) {
+					ps = PS_CRC;
+					part_len = 4;
+					crc_ptr = &buf[j]; 
+				} else
+					part_len--;
+				break;
+			case PS_CRC:
+				if (part_len == 0) {
+					uint32_t crc;
+					crc = crc32(value_ptr, value_len);
+					if (htobe32(crc) != *(uint32_t *)crc_ptr) {
+						emd_log(LOG_DEBUG, "crc error!");
+						ps = INITIAL;
+					} else {
+						*pcount = be16toh(*(uint16_t *)value_ptr);
+						buf_len = value_len - sizeof(uint16_t);
+						memmove(*data, value_ptr + sizeof(uint16_t), buf_len);
+						parsed = 1;
+					}
+				} else
+					part_len--;
+				break;
+			}
+		}
+	}
+
+	// parse unpacked tlv
+	if (parsed) {
+		parsed = 0;
+		ps = PS_TAG;
+		for (j = 0; !parsed && j < buf_len; j++) {
+			ch = buf[j];
+			switch (ps) {
+				case PS_TAG:
+					*tag = ch;
+					ps = PS_TAG;
+					break;
+				case PS_LEN:
+					if (*ch & 0x80) {
+						part_len = (ch & 0x7f);
+						if (part_len > 4) {
+							ps = PS_INITIAL;
+							break;
+						}
+						value_len = 0;
+					} else {
+						part_len = 0;
+						value_len = ch;
+					}
+					ps = PS_LEN;
+					break;
+				case PS_LEN:
+					if (part_len == 0) {
+						ps = PS_VALUE;
+						part_len = value_len;
+						value_ptr = &buf[j];
+					} else {
+						value_len = value_len << 8 + ch;
+						part_len--;
+					}
+					break;
+			}
+		}
+	}
+							memmove(*data, value_ptr, value_len);
+		
+	return i + 1;
+
+	unstuff(data, len);
+#ifdef DEBUG
+	print_buf(*data, *len, str, sizeof(str));
+	emd_log(LOG_DEBUG, "in tlv:%s", str);
+#endif
+	if (break_tlv(tag, data, len) == -1)
+		return -1;
+	if (*tag != 0x81)
+		return -1;
+	uint32_t crc;
+	crc = crc32(*data, *len - sizeof(uint32_t));
+	if (htobe32(crc) != *(uint32_t *)(*data + *len - sizeof(uint32_t)))
+		return -1;
+	*pcount = be16toh(*(uint16_t *)(*data));
+	(*len) -= (sizeof(uint16_t) + sizeof(uint32_t));
+	memmove(*data, *data + sizeof(uint16_t), *len);
+	if (break_tlv(tag, data, len) == -1)
+		return -1;
+#ifdef DEBUG
+	print_buf(*data, *len, str, sizeof(str));
+	emd_log(LOG_DEBUG, "in:%s", str);
+#endif
+	return 0;
+}
+
+#if 0
+int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
+{
 #ifdef DEBUG
 	char str[256];
 	print_buf(*data, *len, str, sizeof(str));
@@ -219,7 +397,7 @@ int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
 #endif
 	return 0;
 }
-
+#endif
 #else
 static int break_tlv(uint8_t *tag, uint8_t *data, int data_len);
 static int stuff(uint8_t *data, int data_len, int buf_len);
@@ -388,6 +566,9 @@ int decode(uint16_t *pcount, uint8_t *tag, uint8_t *data, int data_len)
 }
 
 #endif	// TLV_ALLOC_MEM
+
+
+
 uint32_t crc32(uint8_t * buf, size_t len) 
 {
 	static const uint32_t crc32_table[256] = {

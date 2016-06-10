@@ -7,8 +7,10 @@ emd_SOURCES = emd.c emd.h \
 	server.h server.c \
 	log.c log.h debug.h \
 	sv_read.c sv_read.h \
-	adc_tlv.h adc_tlv.c \
+	tlv.h tlv.c \
+	sock_tlv.h sock_tlv.c \
 	adc_client.h adc_client.c \
+	sync_client.h sync_client.c \
 	calc.h calc.c \
 	settings.h settings.c \
 	proto.h

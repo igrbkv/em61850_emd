@@ -24,6 +24,8 @@ enum REQ_CODES {
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
+	GET_SYNC_PROP_REQ,
+	SET_SYNC_PROP_REQ,
 	GET_CALC_REQ,
 };
 
@@ -102,6 +104,19 @@ struct __attribute__((__packed__)) streams_properties {
 
 typedef struct streams_properties streams_prop_resp;
 
+struct __attribute__((__packed__)) output_properties {
+	uint8_t mode;
+	double freq;
+	double impulse_duration;
+	double impulse_delay;
+};
+
+struct __attribute__((__packed__)) sync_properties {
+	uint8_t in_sig;
+	struct output_properties out[2];
+};
+
+typedef struct sync_properties sync_prop_resp;
 
 #define STREAM2_START_IDX 8
 #define I_START_IDX 0

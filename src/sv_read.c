@@ -271,6 +271,9 @@ int read_start()
 	if (strcasecmp(dst_mac1, dst_mac2) == 0)
 		dst_mac2[0] = '\0';
 
+	// FIXME!!! временный костыль
+	//src_mac1[0] = src_mac2[0] = '\0';
+
 	if (dst_mac1[0] && !dst_mac2[0]) {
 		if (!src_mac1[0] && !src_mac2[0])
 			asprintf(&filter, fmt[0], dst_mac1);

@@ -22,6 +22,7 @@
 #include "emd.h"
 #include "tcp_server.h"
 #include "adc_client.h"
+#include "sync_client.h"
 #include "sv_read.h"
 #include "log.h"
 #include "settings.h"
@@ -88,6 +89,7 @@ int main(int argc, char **argv)
 
 	if (tcp_server_init() == -1 ||
 		adc_client_init() == -1 ||
+		sync_client_init() == -1 ||
 		sv_read_init() == -1)
 		goto  end;
 
@@ -128,6 +130,7 @@ static void cleanup()
 {
 
 	tcp_server_close();
+	sync_client_close();
 	adc_client_close();
 	sv_read_close();
 

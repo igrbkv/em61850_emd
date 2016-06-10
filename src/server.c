@@ -10,6 +10,7 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "adc_client.h"
+#include "sync_client.h"
 #include "proto.h"
 #include "calc.h"
 
@@ -151,6 +152,37 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				read_start();
 			}
 
+			break;
+		}
+		case GET_SYNC_PROP_REQ: {
+			if (hdr->data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_SYNC_PROP_REQ error data size!");
+				return -1;
+			}
+			if (sync_prop_valid) {
+				pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(sync_prop_resp));
+				resp->msg_code = hdr->msg_code;
+				resp->data_len = htons(sizeof(sync_prop_resp));
+				sync_prop_resp *data = (sync_prop_resp *)resp->data;
+				*data = sync_prop;
+				*out = (void *)resp;
+				*out_len = sizeof(pdu_t) + sizeof(sync_prop_resp);
+			} else
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+
+			break;
+		} 
+		case SET_SYNC_PROP_REQ: {
+			if (hdr->data_len != sizeof(sync_prop_resp)) {
+				emd_log(LOG_DEBUG, "SET_SYNC_PROP_REQ error data size!");
+				return -1;
+			}
+			sync_prop_resp *data = (sync_prop_resp *)hdr->data;
+			if (set_sync_prop(data) == -1)
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			else {
+				make_confirmation(hdr->msg_code, out, out_len);
+			}
 			break;
 		}
 		case GET_CALC_REQ: {

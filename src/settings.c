@@ -281,6 +281,7 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 	}
 #else
 	char *buf = strdup("");
+	char *_buf = NULL;
 #endif
 	fp = fopen(conf_file, "r+");
 	if (fp == NULL) {
@@ -309,7 +310,10 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 #ifdef USE_TMP_FILE
 						fprintf(fp_tmp, "%s%c%s\n", key, sep[0], new_value);
 #else
-						asprintf(&buf, "%s%s%c%s\n", buf, key, sep[0], new_value);
+						_buf = NULL;
+						asprintf(&_buf, "%s%s%c%s\n", buf, key, sep[0], new_value);
+						free(buf);
+						buf = _buf;
 #endif
 					}
 					updated = 1;
@@ -320,7 +324,10 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 #ifdef USE_TMP_FILE
 		fprintf(fp_tmp, "%s", line);
 #else
-		asprintf(&buf,"%s%s", buf, line);
+		_buf = NULL;
+		asprintf(&_buf,"%s%s", buf, line);
+		free(buf);
+		buf = _buf;
 #endif
 	}
 
@@ -333,7 +340,10 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 #ifdef USE_TMP_FILE
 		fprintf(fp_tmp, "%s%s%c%s\n", nl, par, sep[0], new_value);
 #else
-		asprintf(&buf, "%s%s%s%c%s\n", buf, nl, par, sep[0], new_value);
+		_buf = NULL;
+		asprintf(&_buf, "%s%s%s%c%s\n", buf, nl, par, sep[0], new_value);
+		free(buf);
+		buf = _buf;
 #endif
 	}
 	
