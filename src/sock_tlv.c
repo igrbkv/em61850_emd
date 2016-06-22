@@ -6,18 +6,24 @@
 #include <sys/types.h>
 #include <linux/if_alg.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 #include "log.h"
 #include "tlv.h"
 #include "sock_tlv.h"
 
-#define RECV_BUF_SIZE 1512
-#define SEND_RECV_RETRY 10 
+#define DEFAULT_BUF_SIZE 1512
+#define SEND_RECV_RETRY 3 
 
+static int sock_tlv_rcv(struct sock_tlv *st, int timeout);
 
 int sock_tlv_init(struct sock_tlv *st, const char *remote, uint16_t port)
 {
-	st->recv_buf = malloc(RECV_BUF_SIZE);
+	if (!st->size)
+		st->size = DEFAULT_BUF_SIZE;
+
+	st->recv_buf = malloc(st->size);
+	st->value = malloc(st->size);
 
 	st->sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (st->sock == -1) {
@@ -47,73 +53,103 @@ int sock_tlv_init(struct sock_tlv *st, const char *remote, uint16_t port)
         return -1;
 	}
 
-	if(setsockopt(st->sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1)
-	{
-        emd_log(LOG_DEBUG, "setsockopt(SO_RCVTIMEO) failed: %s", strerror(errno));
-        return -1;
-	}
-    
-	st->pcount = 0;
+
+	st->scount = 0;
 
 	return 0;
 }
 
-int sock_tlv_send_recv(struct sock_tlv *st, uint8_t out_tag, char *out_value, int out_len, char *in_tag, char *in_value, int in_len)
+int sock_tlv_rcv(struct sock_tlv *st, int timeout)
+{
+	int sz = 0;
+	socklen_t sl = 0;
+	struct pollfd pfd[1];
+	pfd[0].fd = st->sock;
+	pfd[0].events = POLLIN;
+
+	int ret = poll(pfd, 1, timeout);
+
+	// error
+	if (ret == -1) {
+		emd_log(LOG_DEBUG, "%s poll() failed: (%d) %s", __func__, errno, strerror(errno));
+		return -1;
+	}
+	// timeout
+	if (ret == 0) { 
+		if (timeout)
+			emd_log(LOG_DEBUG, "%s poll() timeout", __func__);
+		return -1;
+	}
+	if (pfd[0].revents & POLLIN) {
+		if ((sz = recvfrom(st->sock, &st->recv_buf[st->cur], 
+			DEFAULT_BUF_SIZE - st->cur, 0, NULL, &sl)) == -1) {
+			emd_log(LOG_WARNING, "%s recvfrom failed:(%d) %s", __func__, errno, strerror(errno));
+			return -1;
+		}
+		st->cur += sz;
+	}
+	return sz;
+}
+
+int sock_tlv_poll(struct sock_tlv *st)
+{
+	int ret;
+	while ((ret = sock_tlv_rcv(st, 0))) {
+		// error
+		if (ret == -1)
+			return -1;
+
+		if (st->poll_cb) {
+			st->cur -= decode(&st->rcount, &st->tag, st->value, &st->len);
+			if (st->len == -1)
+				continue;
+			st->poll_cb(st->rcount, st->tag, st->len, st->value);
+		} else
+			// erase
+			st->cur = 0;
+	}
+	return 0;
+}
+
+int sock_tlv_send_recv(struct sock_tlv *st)
 {
 	int ret = -1;
-	char *out_buf;
-	int out_buf_len = out_len, sz;
-	uint8_t tag;
-	uint16_t ccount;
-	socklen_t sl = 0;
+	uint8_t tag = st->tag;
 
-	out_buf = malloc(out_len);
-	memcpy(out_buf, out_value, out_len);
-
-	if (encode(st->pcount++, out_tag, (uint8_t **)&out_buf, &out_buf_len) == -1) {
+	if (encode(st->scount++, st->tag, st->value, &st->len, st->size) == -1) {
 		emd_log(LOG_DEBUG, "encode() failed: %s", strerror(errno));
 		goto exit;
 	}
 
     for (int retry = 0; retry < SEND_RECV_RETRY; retry++) {
-		int errn;
+		// erase socket buffer
+		if (st->poll)
+			st->poll(st);
 
-        if (sendto(st->sock, out_buf, out_buf_len, 0, (const struct sockaddr *)&st->remote, sizeof(struct sockaddr_in)) == -1) {
-            errn = errno;
-            emd_log(LOG_DEBUG, "sendto failed:(%d) %s", errno, strerror(errno));
-            if (errn == 11)
-                continue;
+        if (sendto(st->sock, st->value, st->len, 0, (const struct sockaddr *)&st->remote, sizeof(struct sockaddr_in)) == -1) {
+            emd_log(LOG_DEBUG, "sendto() failed:(%d) %s", errno, strerror(errno));
             goto exit;
         }
 
+		int timeout = st->timeout;
 		while (1) {
-			if ((sz = recvfrom(st->sock, st->recv_buf, RECV_BUF_SIZE, 0, NULL, &sl)) == -1) {
-				errn = errno;
-				emd_log(LOG_WARNING,"recvfrom failed:(%d) %s", errno, strerror(errno));
-				if (errn == 11)
-					break;
-				goto exit;
-			}
+			ret = sock_tlv_rcv(st, timeout);
+			timeout = 0;
+			st->len  = st->cur;
+			memcpy(st->value, st->recv_buf, st->len);
+			st->cur -= decode(&st->rcount, &st->tag, st->value, &st->len);
+			if (st->len == -1)
+				continue;
 
-			if (decode(&ccount, &tag, (uint8_t **)&st->recv_buf, &sz) == -1) {
-				emd_log(LOG_DEBUG, "decode failed: %s", strerror(errno));
-				goto exit;
-			}
-			if (tag != out_tag && tag != 0x31 && tag != 0x32)
+			if (tag != st->tag && st->tag != 0x31 && st->tag != 0x32)
 					continue;
-			ret = in_len < sz? in_len: sz;
+			ret = st->len;
 
-			if (in_tag)
-				*in_tag = tag;
-			if (in_value)
-				memcpy(in_value, st->recv_buf, ret);
 			goto exit;
 		}
 	}
 
 exit:
-	if (out_buf)
-		free(out_buf);
 
 	return ret;
 }
@@ -121,13 +157,17 @@ exit:
 int sock_tlv_close(struct sock_tlv *st)
 {
 	if (st->recv_buf) {
-            free(st->recv_buf);
-            st->recv_buf = NULL;
+		free(st->recv_buf);
+		st->recv_buf = NULL;
+	}
+	if (st->value) {
+		free(st->value);
+		st->value = NULL;
 	}
 
 	if (st->sock != -1) {
-            close(st->sock);
-            st->sock = -1;
+		close(st->sock);
+		st->sock = -1;
 	}
 
 	return 0; 

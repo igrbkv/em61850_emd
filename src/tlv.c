@@ -14,214 +14,154 @@
 #include "log.h"
 
 
-#include "debug.h"
-
 enum PARSE_STATE {
 	PS_INITIAL,
+	PS_C0,
 	PS_TAG,
 	PS_LEN,
-	PS_VALUE,
-	PS_CRC
+	PS_VALUE
 };
 
-#ifdef TLV_ALLOC_MEM
-static int break_tlv(uint8_t *tag, uint8_t **data, int *len);
-static void stuff(uint8_t **data, int *len);
-static void unstuff(uint8_t **data, int *len);
+static int stuff(uint8_t *data, int *len, int buf_size);
 
-#ifdef DEBUG
-static void print_buf(uint8_t *data, int data_len, char *buf, int buf_len)
+static char *print_buf(uint8_t *data, int data_len)
 {
+	int buf_len = data_len*2 + 1;
+	char *buf = malloc(buf_len + 1);
 	int n = 0;
-	memset(buf, 0, buf_len);
 	for (int i = 0; i < data_len; i++) {
 		n += snprintf(&buf[n], buf_len - n, "%02X", data[i]);
 	}
-	buf[buf_len - 1] = '\0';
-}
-#endif
-
-void make_tlv(uint8_t tag, uint8_t **data, int *len)
-{
-	uint8_t *buf;
-	int sz;
-	if (*len < 0x7f) {
-		buf = (uint8_t *)malloc(1 + 1 + *len);
-		buf[0] = tag;
-		buf[1] = *len;
-		sz = 1;
-	} else {
-		uint8_t i = 0;
-		sz = *len;
-		for (; sz; i++)
-			sz /= 256;
-		sz = i;
-
-		buf = (uint8_t *)malloc(1 + 1 + sz + *len);
-		buf[0] = tag;
-		buf[1] = 0x80 + i;
-		for (i = 0; i < sz; i++)
-			buf[2 + i] = ((*len) >> (sz - 1 - i)*8) & 0xff;
-		sz++;
-	}
-
-	memcpy(&buf[1 + sz], *data, *len);
-		
-	free(*data);
-	*data = buf;
-	*len = sz + 1 + *len;
+	buf[n] = '\0';
+	return buf;
 }
 
-// @return -1 parse failed
-int break_tlv(uint8_t *tag, uint8_t **data, int *len)
+int make_tlv(uint8_t tag, uint8_t *data, int *len, int buf_size)
 {
-	if (*len < 2) return -1;
+	int i;
+	int data_len = *len;
+	int tlv_len = (data_len + 0x7f)/256 + 1;
+	if ((1 + tlv_len + data_len) > buf_size)
+		goto buf_size_err;
 
-	uint8_t *buf = *data;
-
-	*tag = *buf++;
-	(*len)--;
-
-	int sz_len, sz_val;
-	if (*buf & 0x80) {
-		sz_len = (*buf & 0x7f) + 1;
-		sz_val = *(buf + 1);
-		for (int i = 2; i < sz_len; i++) {
-			sz_val <<= 8;
-			sz_val += *(buf + i);
-		}
-	} else {
-		sz_len = 1;
-		sz_val = *buf;
+	memmove(&data[1 + tlv_len], data, data_len);
+	data[0] = tag;
+	if (tlv_len == 1)
+		data[1] = data_len;
+	else {
+		data[1] = 0x80 + tlv_len - 1;
+		for (i = 0; i < (tlv_len - 1); i++)
+			data[2 + i] = (data_len >> (tlv_len - i)*8) & 0xff;
 	}
-	buf += sz_len;
-	(*len) -= sz_len;
-	if ((*len) - sz_val < 0)
+	data_len += 1 + tlv_len; 
+	*len = data_len;
+	return 0;
+
+buf_size_err:
+	emd_log(LOG_DEBUG, "%s the buffer size is too small", __func__);
+	return -1;
+}
+
+int stuff(uint8_t *data, int *len, int buf_size)
+{
+	int i = 0;
+	int data_len = *len;
+	
+	memmove(&data[1], data, data_len);
+	data_len++;
+	if (data_len > buf_size)
+		goto buf_size_err;
+
+	data[i++] = 0xC0;
+	for (; i < data_len; i++) {
+		if (data[i] == 0xC0 || data[i] == 0xDB) {
+			if (data_len + 1 > buf_size)
+				goto buf_size_err;
+			memmove(&data[i+1], &data[i], data_len-i);
+			data_len++;
+			data[i+1] = data[i] == 0xC0? 0xDC: 0xDD;
+			data[i++] = 0xDB;
+		} 
+	}
+	if (++data_len > buf_size)
+		goto buf_size_err;
+	data[i] = 0xC0;
+
+	*len = data_len;
+	return 0;
+buf_size_err:
+	emd_log(LOG_DEBUG, "%s the buffer size is too small", __func__);
+	return -1;
+}
+
+int encode(uint16_t pcount, uint8_t tag, uint8_t *data, int *len, int buf_size)
+{
+	if (make_tlv(tag, data, len, buf_size) == -1)
 		return -1;
-	
-	memmove(*data, buf, *len);
+
+	if (*len + sizeof(uint16_t) + sizeof(uint32_t) > buf_size)
+		goto buf_size_err;
+
+	memmove(&data[sizeof(uint16_t)], data, *len);
+	*((uint16_t *)data) = htobe16(pcount);
+	*len += sizeof(uint16_t);
+	uint32_t crc = crc32(data, *len);
+
+	*((uint32_t *)&data[*len]) = htobe32(crc);
+	*len += sizeof(uint32_t);
+
+	if (make_tlv(0x80, data, len, buf_size) == -1)
+		goto buf_size_err;
+
+	if (emd_debug > 1) {
+		char *str = print_buf(data, *len);
+		emd_log(LOG_DEBUG, "out tlv:%s", str);
+		free(str);
+	}
+
+	if (stuff(data, len, buf_size) == -1)
+		goto buf_size_err;
 
 	return 0;
+
+buf_size_err:
+	emd_log(LOG_DEBUG, "%s the buffer size is too small", __func__);
+	return -1;
 }
 
-void stuff(uint8_t **data, int *len)
+// data => msg tlv => tlv 
+// @return - number of bytes reads
+// if *len == -1 msg not found
+int decode(uint16_t *pcount, uint8_t *tag, uint8_t *data, int *len)
 {
-	int buf_len = *len + 2, i = 0, j = 0;
-	uint8_t *buf = (uint8_t *)malloc(buf_len);
-	
-	buf[j++] = 0xC0;
-	for (; i < *len; i++, j++) {
-		if ((*data)[i] == 0xC0) {
-			buf_len++;
-			buf = realloc(buf, buf_len);
-			buf[j++] = 0xDB;
-			buf[j] = 0xDC;
-		} else if ((*data)[i] == 0xDB) {
-			buf_len++;
-			buf = realloc(buf, buf_len);
-			buf[j++] = 0xDB;
-			buf[j] = 0xDD;
-		} else
-			buf[j] = (*data)[i];
-	}
-	buf[j] = 0xC0;
-
-	free(*data);
-
-	*data = buf;
-	*len = buf_len;
-}
-
-void unstuff(uint8_t **data, int *len)
-{
-	int i = 0, j = 0;
-	uint8_t *buf = *data;
-	int db = 0;
-	for (; i < *len; i++) {
-		if (buf[i] == 0xC0) {
-			db = 0;
-			continue;
-		} else if (buf[i] == 0xDB) {
-			db = 1;
-			continue;
-		} else if (buf[i] == 0xDC && db) {
-			db = 0;
-			buf[j++] = 0xC0;
-		} else if (buf[i] == 0xDD && db) {
-			db = 0;
-			buf[j++] = 0xDB;
-		} else {
-			if (db) {
-				buf[j++] = 0xDB;
-				db = 0;
-			}
-			buf[j++] = buf[i];
-		}
-	}
-	*len = j;
-}
-
-// stuff(make_tag(tag 0x80, pcount + data + crc32(pcount + data))) 
-int encode(uint16_t pcount, uint8_t tag, uint8_t **data, int *len)
-{
-	make_tlv(tag, data, len);
-
-	int sz = sizeof(uint16_t) + (*len) + sizeof(uint32_t);
-	uint8_t *buf = (uint8_t *)malloc(sz);
-	uint8_t *ptr = buf;
-	*((uint16_t *)ptr) = htobe16(pcount);
-	ptr += sizeof(pcount);
-	memcpy(ptr, *data, *len);
-	ptr += *len;
-	
-	uint32_t crc = crc32(buf, sizeof(uint16_t) + *len); 
-	*((uint32_t *)ptr) = htobe32(crc);
-	make_tlv(0x80, &buf, &sz);
-#ifdef DEBUG
-	char str[256];
-	print_buf(buf, sz, str, sizeof(str));
-	emd_log(LOG_DEBUG, "out tlv:%s", str);
-#endif
-	stuff(&buf, &sz);
-#ifdef DEBUG
-	print_buf(buf, sz, str, sizeof(str));
-	emd_log(LOG_DEBUG, "out stuff:%s", str);
-#endif
-
-	free(*data);
-	*data = buf;
-	*len = sz;
-
-	return 0;
-}
-
-int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
-{
-	if (*len <= 0 || *data == NULL)
+	if (*len <= 0 || data == NULL)
 		return 0;
 
-#ifdef DEBUG
-	char str[256];
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in stuff:%s", str);
-#endif
+	if (emd_debug > 1) {
+		char *str = print_buf(data, *len);
+		emd_log(LOG_DEBUG, "in stuff:%s", str);
+		free(str);
+	}
 
+	int bytes_reads = 0;
 	int i = 0, j = 0;
-	uint8_t *buf = *data;
+	uint8_t *buf = data;
 	int db = 0;
 	int buf_len = *len,
 		part_len,
 		value_len;
-	uint8_t *value_ptr, *crc_ptr;
+	uint8_t *value_ptr;
 	int parsed = 0;
 
 	*len = -1;	// msg not found
 
-	PARSE_STATE ps = PS_INITIAL;
+	enum PARSE_STATE ps = PS_INITIAL;
 	// msg parse
 	for (; !parsed && i < buf_len; i++) {
 		if (buf[i] == 0xC0) {
 			db = 0;
+			ps = PS_C0;
+			bytes_reads = i;
 			continue;
 		} else if (buf[i] == 0xDB) {
 			db = 1;
@@ -243,11 +183,13 @@ int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
 		uint8_t ch = buf[j-1];
 		switch (ps) {
 			case PS_INITIAL:
-				if (ch == 0x81)
+				break;
+			case PS_C0:
+				if (ch == 0x81) // || ch == 0x80)
 					ps = PS_TAG;
 				break;
 			case PS_TAG:
-				if (*ch & 0x80) {
+				if (ch & 0x80) {
 					part_len = (ch & 0x7f);
 					if (part_len > 4) {
 						ps = PS_INITIAL;
@@ -262,310 +204,100 @@ int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
 				break;
 			case PS_LEN:
 				if (part_len == 0) {
+					if (value_len < sizeof(uint16_t) + sizeof(uint32_t))
+						ps = PS_INITIAL;
 					ps = PS_VALUE;
 					part_len = value_len;
-					value_ptr = &buf[j];
+					value_ptr = &buf[j-1];
 				} else {
-					value_len = value_len << 8 + ch;
+					value_len = (value_len << 8) + ch;
 					part_len--;
+					break;
+				}
+			case PS_VALUE:
+				if (--part_len == 0) {
+					uint32_t crc;
+					crc = crc32(value_ptr, value_len - sizeof(uint32_t));
+					if (htobe32(crc) != *(uint32_t *)&value_ptr[value_len - sizeof(uint32_t)]) {
+						emd_log(LOG_DEBUG, "crc error!");
+						ps = PS_INITIAL;
+					} else {
+						if (pcount)
+							*pcount = be16toh(*(uint16_t *)value_ptr);
+						buf_len = value_len - sizeof(uint16_t) - sizeof(uint32_t);
+						memmove(data, value_ptr + sizeof(uint16_t), buf_len);
+						parsed = 1;
+						bytes_reads = i + 1;
+					}
 				}
 				break;
-			case PS_VALUE:
-				if (part_len == 0) {
-					ps = PS_CRC;
-					part_len = 4;
-					crc_ptr = &buf[j]; 
-				} else
-					part_len--;
-				break;
-			case PS_CRC:
-				if (part_len == 0) {
-					uint32_t crc;
-					crc = crc32(value_ptr, value_len);
-					if (htobe32(crc) != *(uint32_t *)crc_ptr) {
-						emd_log(LOG_DEBUG, "crc error!");
-						ps = INITIAL;
-					} else {
-						*pcount = be16toh(*(uint16_t *)value_ptr);
-						buf_len = value_len - sizeof(uint16_t);
-						memmove(*data, value_ptr + sizeof(uint16_t), buf_len);
-						parsed = 1;
-					}
-				} else
-					part_len--;
-				break;
-			}
 		}
 	}
 
 	// parse unpacked tlv
 	if (parsed) {
 		parsed = 0;
-		ps = PS_TAG;
+		ps = PS_INITIAL;
 		for (j = 0; !parsed && j < buf_len; j++) {
-			ch = buf[j];
+			uint8_t ch = buf[j];
 			switch (ps) {
-				case PS_TAG:
-					*tag = ch;
+				case PS_INITIAL:
+					if (tag)
+						*tag = ch;
 					ps = PS_TAG;
 					break;
-				case PS_LEN:
-					if (*ch & 0x80) {
+				case PS_TAG:
+					if (ch & 0x80) {
 						part_len = (ch & 0x7f);
 						if (part_len > 4) {
 							ps = PS_INITIAL;
 							break;
 						}
 						value_len = 0;
+						ps = PS_LEN;
 					} else {
-						part_len = 0;
 						value_len = ch;
+						value_ptr = &buf[j+1];
+						if (value_len == 0)
+							parsed = 1;
+						else {
+							part_len = value_len;
+							ps = PS_VALUE;
+						}
 					}
-					ps = PS_LEN;
 					break;
 				case PS_LEN:
-					if (part_len == 0) {
+					value_len = (value_len << 8) + ch;
+					if (--part_len == 0) {
 						ps = PS_VALUE;
+						value_ptr = &buf[j+1];
 						part_len = value_len;
-						value_ptr = &buf[j];
-					} else {
-						value_len = value_len << 8 + ch;
-						part_len--;
+						if (value_len == 0)
+							parsed = 1;
 					}
+					break;
+				case PS_VALUE:
+					if (--part_len == 0)
+						parsed = 1;
 					break;
 			}
 		}
-	}
-							memmove(*data, value_ptr, value_len);
-		
-	return i + 1;
+		if (parsed) {
+			*len = value_len;
+			memmove(data, value_ptr, value_len);
 
-	unstuff(data, len);
-#ifdef DEBUG
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in tlv:%s", str);
-#endif
-	if (break_tlv(tag, data, len) == -1)
-		return -1;
-	if (*tag != 0x81)
-		return -1;
-	uint32_t crc;
-	crc = crc32(*data, *len - sizeof(uint32_t));
-	if (htobe32(crc) != *(uint32_t *)(*data + *len - sizeof(uint32_t)))
-		return -1;
-	*pcount = be16toh(*(uint16_t *)(*data));
-	(*len) -= (sizeof(uint16_t) + sizeof(uint32_t));
-	memmove(*data, *data + sizeof(uint16_t), *len);
-	if (break_tlv(tag, data, len) == -1)
-		return -1;
-#ifdef DEBUG
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in:%s", str);
-#endif
-	return 0;
-}
-
-#if 0
-int decode(uint16_t *pcount, uint8_t *tag, uint8_t **data, int *len)
-{
-#ifdef DEBUG
-	char str[256];
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in stuff:%s", str);
-#endif
-	unstuff(data, len);
-#ifdef DEBUG
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in tlv:%s", str);
-#endif
-	if (break_tlv(tag, data, len) == -1)
-		return -1;
-	if (*tag != 0x81)
-		return -1;
-	uint32_t crc;
-	crc = crc32(*data, *len - sizeof(uint32_t));
-	if (htobe32(crc) != *(uint32_t *)(*data + *len - sizeof(uint32_t)))
-		return -1;
-	*pcount = be16toh(*(uint16_t *)(*data));
-	(*len) -= (sizeof(uint16_t) + sizeof(uint32_t));
-	memmove(*data, *data + sizeof(uint16_t), *len);
-	if (break_tlv(tag, data, len) == -1)
-		return -1;
-#ifdef DEBUG
-	print_buf(*data, *len, str, sizeof(str));
-	emd_log(LOG_DEBUG, "in:%s", str);
-#endif
-	return 0;
-}
-#endif
-#else
-static int break_tlv(uint8_t *tag, uint8_t *data, int data_len);
-static int stuff(uint8_t *data, int data_len, int buf_len);
-static int unstuff(uint8_t *data, int data_len);
-
-int make_tlv(uint8_t tag, uint8_t *data, int data_len, int buf_len)
-{
-	int sz;
-	uint8_t i = 0;
-	if (data_len < 0x7f)
-		sz = 1;
-	else {
-		sz = data_len;
-		for (; sz; i++)
-			sz /= 256;
-		sz = i;
-	}
-	if (1 + sz + data_len > buf_len)
-		return -1;
-	memmove(&data[1 + sz], data, data_len);
-
-	data[0] = tag;
-	if (sz == 1)
-		data[1] = data_len;
-	else {
-		data[1] = 0x80 + sz;
-		for (i = 0; i < sz; i++)
-			data[2 + i] = (data_len >> (sz - 1 - i)*8) & 0xff;
-	}
-
-	return 1 + sz + data_len;
-}
-
-// @return -1 parse failed or value len
-int break_tlv(uint8_t *tag, uint8_t *tlv, int len)
-{
-	if (len < 2) 
-		return -1;
-
-	uint8_t *buf = tlv;
-
-	*tag = *buf++;
-	len--;
-
-	int sz_len, sz_val;
-	if (*buf & 0x80) {
-		sz_len = (*buf & 0x7f) + 1;
-		sz_val = *(buf + 1);
-		for (int i = 2; i < sz_len; i++) {
-			sz_val <<= 8;
-			sz_val += *(buf + i);
-		}
-	} else {
-		sz_len = 1;
-		sz_val = *buf;
-	}
-	buf += sz_len;
-	len -= sz_len;
-	if (len - sz_val < 0)
-		return -1;
-	
-	memmove(tlv, buf, len);
-
-	return len;
-}
-
-int stuff(uint8_t *data, int data_len, int buf_len)
-{
-	if (data_len + 2 > buf_len)
-		return -1;
-
-	int j = 0, i = buf_len - data_len;
-	memmove(&data[i], data, data_len);
-	
-	data[j++] = 0xC0;
-	for (; i < buf_len; i++, j++) {
-		if (data[i] == 0xC0) {
-			data_len++;
-			if (j == i)
-				return -1;
-			data[j++] = 0xDB;
-			data[j] = 0xDC;
-		} else if (data[i] == 0xDB) {
-			data_len++;
-			if (j == i)
-				return -1;
-			data[j++] = 0xDB;
-			data[j] = 0xDD;
-		} else
-			data[j] = data[i];
-	}
-	if (j == buf_len)
-		return -1;
-	data[j] = 0xC0;
-	data_len++;
-	
-	return data_len;
-}
-
-int unstuff(uint8_t *data, int len)
-{
-	int i = 0, j = 0;
-	int db = 0;
-	for (; i < len; i++) {
-		if (data[i] == 0xC0) {
-			db = 0;
-			continue;
-		} else if (data[i] == 0xDB) {
-			db = 1;
-			continue;
-		} else if (data[i] == 0xDC && db) {
-			db = 0;
-			data[j++] = 0xC0;
-		} else if (data[i] == 0xDD && db) {
-			db = 0;
-			data[j++] = 0xDB;
-		} else {
-			if (db) {
-				data[j++] = 0xDB;
-				db = 0;
+			if (emd_debug > 1) {
+				char *str = print_buf(data, *len);
+				emd_log(LOG_DEBUG, "in tlv:%s", str);
+				free(str);
 			}
-			data[j++] = data[i];
-		}
-	}
-	return j;
+		} else if (emd_debug > 1)
+			emd_log(LOG_DEBUG, "tlv parser failed");
+	} else if (emd_debug > 1)
+		emd_log(LOG_DEBUG, "msg was not parsed");
+		
+	return bytes_reads;
 }
-
-// stuff(make_tag(tag 0x80, pcount + tlv(data) + crc32(pcount + tlv(data)))) 
-int encode(uint16_t pcount, uint8_t tag, uint8_t *data, int data_len, int buf_len)
-{
-	if ((data_len = make_tlv(tag, data, data_len, buf_len)) == 0)
-		return -1;
-
-	int sz = sizeof(uint16_t) + data_len + sizeof(uint32_t);
-	if (sz > buf_len)
-		return -1;
-	memmove(&data[sizeof(uint16_t)], data, data_len);
-	*((uint16_t *)data) = htobe16(pcount);
-	
-	uint32_t crc = crc32(data, sizeof(uint16_t) + data_len); 
-	data_len = sz;
-	*((uint32_t *)&data[sz]) = htobe32(crc);
-	make_tlv(0x80, data, data_len, buf_len);
-	data_len = stuff(data, data_len, buf_len);
-
-	return data_len;
-}
-
-int decode(uint16_t *pcount, uint8_t *tag, uint8_t *data, int data_len)
-{
-	data_len = unstuff(data, data_len);
-	if ((data_len = break_tlv(tag, data, data_len)) == -1)
-		return -1;
-	if (*tag != 0x81)
-		return -1;
-	uint32_t crc;
-	crc = crc32(data, data_len - sizeof(uint32_t));
-	if (htobe32(crc) != *(uint32_t *)(&data[data_len - sizeof(uint32_t)]))
-		return -1;
-	*pcount = be16toh(*(uint16_t *)data);
-	data_len -= (sizeof(uint16_t) + sizeof(uint32_t));
-	memmove(data, &data[sizeof(uint16_t)], data_len);
-	if (break_tlv(tag, data, data_len) == -1)
-		return -1;
-	return data_len;
-}
-
-#endif	// TLV_ALLOC_MEM
 
 
 
@@ -644,27 +376,27 @@ uint32_t crc32(uint8_t * buf, size_t len)
 	return crc ^ 0xFFFFFFFF;
 }
 
-
-#if 0
-char *print_packet(uint8_t *pack, int len)
-{
-	static char buf[256] = {0};
-	int n = 0;
-	for (int i = 0; i < len; i++)
-		n += snprintf(&buf[n], 256-n, "%02x", pack[i]);
-	return buf;
-}
-
+#ifdef TEST
 int main(int argc, char *argv[])
 {
-	uint32_t len;
-	uint8_t *buf = malloc(64);
+	emd_debug = 2;
+	uint32_t len = 512, _len;
+	uint16_t pcount = 1, _pcount;
+	uint8_t tag = 0xb1, _tag;
+	uint8_t *buf = malloc(len);
+	for (int i = 0; i < len; i++)
+		buf[i] = i & 0xff;
+	uint8_t *_buf = malloc(len);
+	memcpy(_buf, buf, len);
+	_len = len;
 	
-	buf[0] = 0;
-	buf[1] = 0;
-	len = 2;
-	encode(1, 0xb1, &buf, &len);
-	printf("encode:%s\n", print_packet(buf, len));
+	encode(pcount, tag, &_buf, &_len);
+	char *str = print_buf(_buf, _len);
+	printf("encode: pcount=%u tag=%u data=%s\n", pcount, tag, str);
+
+	decode(&_pcount, &_tag, _buf, &_len);
+	char *str1 = print_buf(_buf, _len);
+	printf("decode: pcount=%u tag=%u data=%s\n", _pcount, _tag, str1);
 	free(buf);
 }
 #endif

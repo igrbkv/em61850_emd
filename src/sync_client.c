@@ -28,7 +28,9 @@ int sync_prop_valid = 0;
 static struct sock_tlv st = {
     .init = &sock_tlv_init,
     .send_recv = &sock_tlv_send_recv,
-    .close = &sock_tlv_close
+    .close = &sock_tlv_close,
+	.poll = &sock_tlv_poll,
+	.timeout = 250
 };
 
 static int read_properties();
@@ -67,27 +69,32 @@ char *print_packet(uint8_t *pack, int len)
 int set_sync_prop(struct sync_properties *prop)
 {
 	int ret;
-	char req[32];
-	char resp[256];
-	uint8_t tag;
 
 	// input
-	req[0] = prop->in_sig;
-	if ((ret = st.send_recv(&st, 0xc8, req, 1, &tag, resp, sizeof(resp))) == -1)
+	st.tag = 0xc8;
+	st.value[0] = prop->in_sig;
+	st.len = 1;
+	if ((ret = st.send_recv(&st)) == -1)
 		goto err;
 
-	if (tag == 0x32 && resp[0] == 0x01)
+	if (st.tag == 0x32 && st.value[0] == 0x01)
 		sync_prop.in_sig = prop->in_sig;
-	else 
+	else {
+err:
+		emd_log(LOG_DEBUG, "sync board rejected request");
 		goto err1;
+	}
 
 	// PPS out (Output 3) CLK out (Output 4)
 	uint8_t cmd[] = {0xa5, 0xa7};
 	for (int i = 0; i < sizeof(cmd); i++) {
-		if ((ret = st.send_recv(&st, cmd[i], (void *)&prop->out[i], sizeof(struct output_properties), &tag, resp, sizeof(resp))) == -1)
+		st.tag = cmd[i];
+		memcpy(st.value, &prop->out[i], sizeof(struct output_properties));
+		st.len = sizeof(struct output_properties);
+		if ((ret = st.send_recv(&st)) == -1)
 			goto err1;
 
-		if (tag == 0x32 && resp[0] == 0x01)
+		if (st.tag == 0x32 && st.value[0] == 0x01)
 			sync_prop.out[i] = prop->out[i];
 		else
 			goto err;
@@ -96,44 +103,44 @@ int set_sync_prop(struct sync_properties *prop)
 	sync_prop_valid = 1;
 	return 0;
 
-err:
-	emd_log(LOG_DEBUG, "sync request rejected");
 err1:
-	sync_prop_valid = 0;
 	return -1;
 }
 
 int read_properties()
 {
 	int ret;
-	char resp[256];
-	uint8_t tag;
 
 	// input
-	if ((ret = st.send_recv(&st, 0xc7, NULL, 0, &tag, resp, sizeof(resp))) == -1)
-		goto err;
+	st.tag = 0xc7;
+	st.len = 0;
+	if ((ret = st.send_recv(&st)) == -1)
+		goto err1;
 		
-	if (tag == 0xc7) 
-		sync_prop.in_sig = resp[0];
-	else
-		goto err;
+	if (st.tag == 0xc7) 
+		sync_prop.in_sig = st.value[0];
+	else {
+err:
+		emd_log(LOG_DEBUG, "sync board rejected request");
+		goto err1;
+	}
 
 	// PPS out (Output 3) CLK out (Output 4)
 	uint8_t cmd[] = {0xa4, 0xa6};
 	for (int i = 0; i < sizeof(cmd); i++) {
-		if ((ret = st.send_recv(&st, cmd[i], NULL, 0, &tag, resp, sizeof(resp))) == -1)
-			goto err;
+		st.tag = cmd[i];
+		st.len = 0;
+		if ((ret = st.send_recv(&st)) == -1)
+			goto err1;
 			
-		if (tag == cmd[i])
-			sync_prop.out[i] = *(struct output_properties *)&resp[0];
+		if (st.tag == cmd[i])
+			sync_prop.out[i] = *(struct output_properties *)&st.value[0];
 		else
 			goto err;
 	}
 
 	return 0;
-err:
-	emd_log(LOG_DEBUG, "sync request failed");
-
+err1:
 	return -1;
 }
 

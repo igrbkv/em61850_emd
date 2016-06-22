@@ -65,7 +65,8 @@ int adc_prop_valid = 0;
 static struct sock_tlv st = {
     .init = &sock_tlv_init,
     .send_recv = &sock_tlv_send_recv,
-    .close = &sock_tlv_close
+    .close = &sock_tlv_close,
+    .timeout = 500
 };
 
 
@@ -104,21 +105,20 @@ char *print_packet(uint8_t *pack, int len)
 int set_adc_prop(struct adc_properties *prop)
 {
 	int ret;
-	char req[16];
-	char resp[256];
-	uint8_t tag;
-	char buf[32];
+    char buf[32];
 
 	// write ranges
 	for (int i = 0; i < 8; i++) {
 		if (adc_prop.range[i] != prop->range[i]) {
-			req[0] = 0;
-			req[1] = i;
-			req[2] = prop->range[i];
-			if ((ret = st.send_recv(&st, 0xb0, req, 3, &tag, resp, sizeof(resp))) == -1)
+            st.tag = 0xb0;
+			st.value[0] = 0;
+			st.value[1] = i;
+			st.value[2] = prop->range[i];
+            st.len = 3;
+			if ((ret = st.send_recv(&st)) == -1)
 				return -1;
 
-			if (tag == 0x32 && resp[0] == 0x01)
+			if (st.tag == 0x32 && st.value[0] == 0x01)
 				adc_prop.range[i] = prop->range[i];
 			else
 				goto err;
@@ -127,29 +127,33 @@ int set_adc_prop(struct adc_properties *prop)
 
 	// write macs
 	if (memcmp(adc_prop.dst_mac, prop->dst_mac, 17) != 0) {
-		req[0] = 0;
+        st.tag = 0xb4;
+		st.value[0] = 0;
 		memcpy(buf, prop->dst_mac, 17);
 		buf[17] = '\0';
 		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&req[1], &req[2], &req[3],
-			&req[4], &req[5], &req[6]);
-		if ((ret = st.send_recv(&st, 0xb4, req, 7, &tag, resp, sizeof(resp))) == -1)
+			&st.value[1], &st.value[2], &st.value[3],
+			&st.value[4], &st.value[5], &st.value[6]);
+        st.len = 7;
+		if ((ret = st.send_recv(&st)) == -1)
 			goto err1;
-		if (tag == 0x32 && resp[0] == 0x01)
+		if (st.tag == 0x32 && st.value[0] == 0x01)
 			memcpy(adc_prop.dst_mac, prop->dst_mac, 17);
 		else
 			goto err;
 	}
 	if (memcmp(adc_prop.src_mac, prop->src_mac, 17) != 0) {
-		req[0] = 0;
+        st.tag = 0xba;
+		st.value[0] = 0;
 		memcpy(buf, prop->src_mac, 17);
 		buf[17] = '\0';
 		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&req[1], &req[2], &req[3],
-			&req[4], &req[5], &req[6]);
-		if ((ret = st.send_recv(&st, 0xba, req, 7, &tag, resp, sizeof(resp))) == -1)
+			&st.value[1], &st.value[2], &st.value[3],
+			&st.value[4], &st.value[5], &st.value[6]);
+        st.len = 7;
+		if ((ret = st.send_recv(&st)) == -1)
 			goto err1;
-		if (tag == 0x32 && resp[0] == 0x01)
+		if (st.tag == 0x32 && st.value[0] == 0x01)
 			memcpy(adc_prop.src_mac, prop->src_mac, 17);
 		else
 			goto err;
@@ -157,17 +161,20 @@ int set_adc_prop(struct adc_properties *prop)
 
 	// write sv_id
 	if (strncmp(adc_prop.sv_id, prop->sv_id, SV_ID_MAX_LEN) != 0) {
-		char *buf = strdup(prop->sv_id);
+		char buf[SV_ID_MAX_LEN * 2];
+        strncpy(buf, prop->sv_id, sizeof(buf));
+        buf[sizeof(buf) - 1] = '\0';
 		int len = strlen(buf);
-		make_tlv(0x31, (uint8_t **)&buf, &len);
+		make_tlv(0x31, (uint8_t *)buf, &len, sizeof(buf));
 
-		req[0] = 0;
+        st.tag = 0xb8;
+		st.value[0] = 0;
 		// FIXME len > sizeof(re) - 1
-		memcpy(&req[1], buf, len);
-		free(buf);
-		if ((ret = st.send_recv(&st, 0xb8, req, len + 1, &tag, resp, sizeof(resp))) == -1)
+		memcpy(&st.value[1], buf, len);
+        st.len = len + 1;
+		if ((ret = st.send_recv(&st)) == -1)
 			goto err1;
-		if (tag == 0x32 && resp[0] == 0x01) {
+		if (st.tag == 0x32 && st.value[0] == 0x01) {
 			strncpy(adc_prop.sv_id, prop->sv_id, SV_ID_MAX_LEN);
 			adc_prop.sv_id[SV_ID_MAX_LEN-1] = '\0';
 		} else
@@ -176,11 +183,13 @@ int set_adc_prop(struct adc_properties *prop)
 
 	// rate
 	if (adc_prop.rate != prop->rate) {
-		req[0] = 0;
-		req[1] = prop->rate;
-		if ((ret = st.send_recv(&st, 0xb2, req, 2, &tag, resp, sizeof(resp))) == -1)
+        st.tag = 0xb2;
+		st.value[0] = 0;
+		st.value[1] = prop->rate;
+        st.len = 2;
+		if ((ret = st.send_recv(&st)) == -1)
 			goto err1;
-		if (tag == 0x32 && resp[0] == 0x01)
+		if (st.tag == 0x32 && st.value[0] == 0x01)
 			adc_prop.rate = prop->rate;
 		else
 			goto err;
@@ -192,7 +201,6 @@ int set_adc_prop(struct adc_properties *prop)
 err:
 	emd_log(LOG_DEBUG, "adc request rejected");
 err1:
-	adc_prop_valid = 0;
 	return -1;
 
 }
@@ -200,61 +208,70 @@ err1:
 int read_properties()
 {
 	int ret;
-	char req[16];
-	char resp[256];
-	char tag;
 
 	// read ranges
 	for (int i = 0; i < 8; i++) {
-		req[0] = 0;
-		req[1] = i;
-		if ((ret = st.send_recv(&st, 0xb1, req, 2, &tag, resp, sizeof(resp))) == -1)
+        st.tag = 0xb1;
+		st.value[0] = 0;
+		st.value[1] = i;
+        st.len = 2;
+		if ((ret = st.send_recv(&st)) == -1)
 			return -1;
 
-		if (tag == 0x32 && ret == 3)
-			adc_prop.range[i] = resp[2];
+		if (st.tag == 0x32 && st.len == 3)
+			adc_prop.range[i] = st.value[2];
 		else
 			goto err;
 	}
 
 	// read macs
-	req[0] = 0;
-	if ((ret = st.send_recv(&st, 0xbb, req, 1, &tag, resp, sizeof(resp))) == -1)
+    st.tag = 0xbb;
+	st.value[0] = 0;
+    st.len = 1;
+	if ((ret = st.send_recv(&st)) == -1)
         return -1;
-	if (tag == 0x32 && ret == 6) {
+	if (st.tag == 0x32 && st.len == 6) {
         char buf[32];
         snprintf(buf, sizeof(buf),  "%02X:%02X:%02X:%02X:%02X:%02X",
-                (uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
+                (uint8_t)st.value[0], (uint8_t)st.value[1], (uint8_t)st.value[2], (uint8_t)st.value[3], (uint8_t)st.value[4], (uint8_t)st.value[5]);
         memcpy(adc_prop.src_mac, buf, 17);
 	} else
         goto err;
 
-	if ((ret = st.send_recv(&st, 0xb5, req, 1, &tag, resp, sizeof(resp))) == -1)
+    st.tag = 0xb5;
+	st.value[0] = 0;
+    st.len = 1;
+	if ((ret = st.send_recv(&st)) == -1)
         return -1;
-	if (tag == 0x32 && ret == 6) {
+	if (st.tag == 0x32 && st.len == 6) {
         char buf[32];
         snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-                (uint8_t)resp[0], (uint8_t)resp[1], (uint8_t)resp[2], (uint8_t)resp[3], (uint8_t)resp[4], (uint8_t)resp[5]);
+                (uint8_t)st.value[0], (uint8_t)st.value[1], (uint8_t)st.value[2], (uint8_t)st.value[3], (uint8_t)st.value[4], (uint8_t)st.value[5]);
         memcpy(adc_prop.dst_mac, buf, 17);
 	} else
         goto err;
 
-
 	// sv_id
-	if ((ret = st.send_recv(&st, 0xb9, req, 1, &tag, resp, sizeof(resp))) == -1)
+    st.tag = 0xb9;
+	st.value[0] = 0;
+    st.len = 1;
+	if ((ret = st.send_recv(&st)) == -1)
         return -1;
-	if (tag == 0x31) {
+	if (st.tag == 0x31) {
         ret = ret < SV_ID_MAX_LEN - 1? ret: SV_ID_MAX_LEN - 1;
-        memcpy(adc_prop.sv_id, resp, ret);
+        memcpy(adc_prop.sv_id, st.value, ret);
         adc_prop.sv_id[ret] = '\0';
 	} else
         goto err;
 
 	// rate
-	if ((ret = st.send_recv(&st, 0xb3, req, 1, &tag, resp, sizeof(resp))) == -1)
+    st.tag = 0xb3;
+	st.value[0] = 0;
+    st.len = 1;
+	if ((ret = st.send_recv(&st)) == -1)
         return -1;
-	if (tag == 0x32 && ret == 2)
-        adc_prop.rate = resp[1];
+	if (st.tag == 0x32 && ret == 2)
+        adc_prop.rate = st.value[1];
 	else
         goto err;
 
