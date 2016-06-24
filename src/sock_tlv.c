@@ -78,7 +78,7 @@ int sock_tlv_rcv(struct sock_tlv *st, int timeout)
 	if (ret == 0) { 
 		if (timeout)
 			emd_log(LOG_DEBUG, "%s poll() timeout", __func__);
-		return -1;
+		return 0;
 	}
 	if (pfd[0].revents & POLLIN) {
 		if ((sz = recvfrom(st->sock, &st->recv_buf[st->cur], 
@@ -132,9 +132,11 @@ int sock_tlv_send_recv(struct sock_tlv *st)
         }
 
 		int timeout = st->timeout;
-		while (1) {
-			ret = sock_tlv_rcv(st, timeout);
-			timeout = 0;
+		while ((ret = sock_tlv_rcv(st, timeout))) {
+			if (ret == -1)
+				return -1;
+			// отладочные сообщения каждые 100 мс
+			timeout = timer - 100 < 0? 0: timer - 100;
 			st->len  = st->cur;
 			memcpy(st->value, st->recv_buf, st->len);
 			st->cur -= decode(&st->rcount, &st->tag, st->value, &st->len);

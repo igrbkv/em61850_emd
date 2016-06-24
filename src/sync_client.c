@@ -74,8 +74,8 @@ int set_sync_prop(struct sync_properties *prop)
 	st.tag = 0xc8;
 	st.value[0] = prop->in_sig;
 	st.len = 1;
-	if ((ret = st.send_recv(&st)) == -1)
-		goto err;
+	if ((ret = st.send_recv(&st)) <= 0)
+		goto err1;
 
 	if (st.tag == 0x32 && st.value[0] == 0x01)
 		sync_prop.in_sig = prop->in_sig;
@@ -91,7 +91,7 @@ err:
 		st.tag = cmd[i];
 		memcpy(st.value, &prop->out[i], sizeof(struct output_properties));
 		st.len = sizeof(struct output_properties);
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 
 		if (st.tag == 0x32 && st.value[0] == 0x01)
@@ -114,7 +114,7 @@ int read_properties()
 	// input
 	st.tag = 0xc7;
 	st.len = 0;
-	if ((ret = st.send_recv(&st)) == -1)
+	if ((ret = st.send_recv(&st)) <= 0)
 		goto err1;
 		
 	if (st.tag == 0xc7) 
@@ -130,7 +130,7 @@ err:
 	for (int i = 0; i < sizeof(cmd); i++) {
 		st.tag = cmd[i];
 		st.len = 0;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 			
 		if (st.tag == cmd[i])

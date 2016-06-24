@@ -115,7 +115,7 @@ int set_adc_prop(struct adc_properties *prop)
 			st.value[1] = i;
 			st.value[2] = prop->range[i];
             st.len = 3;
-			if ((ret = st.send_recv(&st)) == -1)
+			if ((ret = st.send_recv(&st)) <= 0)
 				return -1;
 
 			if (st.tag == 0x32 && st.value[0] == 0x01)
@@ -135,7 +135,7 @@ int set_adc_prop(struct adc_properties *prop)
 			&st.value[1], &st.value[2], &st.value[3],
 			&st.value[4], &st.value[5], &st.value[6]);
         st.len = 7;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01)
 			memcpy(adc_prop.dst_mac, prop->dst_mac, 17);
@@ -151,7 +151,7 @@ int set_adc_prop(struct adc_properties *prop)
 			&st.value[1], &st.value[2], &st.value[3],
 			&st.value[4], &st.value[5], &st.value[6]);
         st.len = 7;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01)
 			memcpy(adc_prop.src_mac, prop->src_mac, 17);
@@ -172,7 +172,7 @@ int set_adc_prop(struct adc_properties *prop)
 		// FIXME len > sizeof(re) - 1
 		memcpy(&st.value[1], buf, len);
         st.len = len + 1;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01) {
 			strncpy(adc_prop.sv_id, prop->sv_id, SV_ID_MAX_LEN);
@@ -187,7 +187,7 @@ int set_adc_prop(struct adc_properties *prop)
 		st.value[0] = 0;
 		st.value[1] = prop->rate;
         st.len = 2;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01)
 			adc_prop.rate = prop->rate;
@@ -215,7 +215,7 @@ int read_properties()
 		st.value[0] = 0;
 		st.value[1] = i;
         st.len = 2;
-		if ((ret = st.send_recv(&st)) == -1)
+		if ((ret = st.send_recv(&st)) <= 0)
 			return -1;
 
 		if (st.tag == 0x32 && st.len == 3)
@@ -228,7 +228,7 @@ int read_properties()
     st.tag = 0xbb;
 	st.value[0] = 0;
     st.len = 1;
-	if ((ret = st.send_recv(&st)) == -1)
+	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x32 && st.len == 6) {
         char buf[32];
@@ -241,7 +241,7 @@ int read_properties()
     st.tag = 0xb5;
 	st.value[0] = 0;
     st.len = 1;
-	if ((ret = st.send_recv(&st)) == -1)
+	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x32 && st.len == 6) {
         char buf[32];
@@ -255,7 +255,7 @@ int read_properties()
     st.tag = 0xb9;
 	st.value[0] = 0;
     st.len = 1;
-	if ((ret = st.send_recv(&st)) == -1)
+	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x31) {
         ret = ret < SV_ID_MAX_LEN - 1? ret: SV_ID_MAX_LEN - 1;
@@ -268,7 +268,7 @@ int read_properties()
     st.tag = 0xb3;
 	st.value[0] = 0;
     st.len = 1;
-	if ((ret = st.send_recv(&st)) == -1)
+	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x32 && ret == 2)
         adc_prop.rate = st.value[1];
