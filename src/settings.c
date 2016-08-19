@@ -58,7 +58,6 @@ int emd_read_conf(const char *file)
 	char buf[512];
 	int line = 0;
 
-	emd_log(LOG_DEBUG, "parsing conf file %s", file);
 
     /* r - read-only */
 	fp = fopen(file, "r");

@@ -61,11 +61,12 @@ int main(int argc, char **argv)
 
 	default_init();
 	handle_cmdline(&argc, &argv);
-	open_log();
 
 	/* read in our configuration */
 	if (emd_read_conf(conffile) == -1)
 		goto end;
+
+	open_log();
 
 	if (!foreground) {
 		if (daemon(0, 0) == -1) {
@@ -128,7 +129,6 @@ static void open_log(void)
 
 static void cleanup()
 {
-
 	tcp_server_close();
 	sync_client_close();
 	adc_client_close();
@@ -169,6 +169,7 @@ static void reload_conf(int sig __attribute__((unused)))
 	loop = uv_default_loop();
 	if (tcp_server_init() == -1 ||
 		adc_client_init() == -1 ||
+		sync_client_init() == -1 ||
 		sv_read_init() == -1)
 		goto err;
 	uv_run(loop, UV_RUN_DEFAULT);

@@ -5,8 +5,11 @@
 #include <time.h>
 #include <string.h>
 #include <endian.h>
+#include <stdio.h>
+#include <errno.h>
 
 #include "log.h"
+#include "tcp_server.h"
 #include "sv_read.h"
 #include "settings.h"
 #include "adc_client.h"
@@ -20,6 +23,7 @@ int correct_time = 1; // Время усанавливается по планш
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void calc_results_to_be64(struct calc_results *cr);
+static void set_network(const network *net);
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -227,6 +231,32 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		} 
+		case GET_VERSION_REQ: {
+			if (hdr->data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_VERSION_REQ error data size!");
+				return -1;
+			}
+			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(versions_resp));
+			resp->msg_code = hdr->msg_code;
+			resp->data_len = htons(sizeof(versions_resp));
+			versions_resp *data = (versions_resp *)resp->data;
+			strncpy(data->emd, VERSION, VERSION_MAX_LEN);
+			strncpy(data->adc, adc_version, VERSION_MAX_LEN);
+			strncpy(data->sync, sync_version, VERSION_MAX_LEN);
+			*out = (void *)resp;
+			*out_len = sizeof(pdu_t) + sizeof(versions_resp);
+			break;
+		}
+		case SET_NETWORK_REQ: {
+			if (hdr->data_len != sizeof(network)) {
+				emd_log(LOG_DEBUG, "SET_NETWORK_REQ error data size!");
+				return -1;
+			}
+			set_network((network *)hdr->data);
+			make_confirmation(hdr->msg_code, out, out_len);
+			break;
+		}
+
 		default:
 			return -1;
 
@@ -234,6 +264,73 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 	return sizeof(pdu_t) + hdr->data_len;;
 }
+
+void set_network(const network *net)
+{
+    char buf[INET_ADDRSTRLEN];
+
+	// adc board
+    inc_ip4_addr(buf, net->addr, 1);
+	adc_change_network(buf, net->mask);
+	
+	// sync board
+    inc_ip4_addr(buf, net->addr, 2);
+	sync_change_network(buf, net->mask, net->gateway);
+
+
+	// network parameters
+	const char *fn = "/etc/conf.d/net"; 
+	FILE *fp = fopen(fn, "w+");
+	if (!fp) {
+		// FIXME restore previos address and etc.
+		emd_log(LOG_ERR, "open(%s) failed!: %s", fn, strerror(errno));
+		return;
+	}
+	fprintf(fp, "config_enp1s0=\"null\"\n"
+		"bridge_br0=\"enp1s0\"\n"
+		"config_br0=\"%s netmask %s\"",
+		net->addr, net->mask);
+	fflush(fp);
+	fclose(fp);
+
+	// udhcpd
+	// тупо посчитать [start, end]:
+	// if xxx.xxx.xxx.nnn < xxx.xxx.xxx.10
+	//	[xxx.xxx.xxx.nnn+3, xxx.xxx.xxx.nnn+3+10]
+	// else
+	//	[xxx.xxx.xxx.nnn-10, xxx.xxx.xxx.nnn-1]
+	// FIXME сделать по маске сети
+	char start[INET_ADDRSTRLEN];
+	char end[INET_ADDRSTRLEN];
+	fn = "/etc/udhcpd.conf";
+	char *pbase = strrchr(net->addr, '.');
+	int base = atoi(++pbase);
+	if (base < 10) {
+		inc_ip4_addr(start, net->addr, 3);
+		inc_ip4_addr(end, start, 10);
+	} else {
+		inc_ip4_addr(start, net->addr, -10);
+		inc_ip4_addr(end, net->addr, -1);
+	}
+	
+	fp = fopen(fn, "w+");
+	if (!fp) {
+		// FIXME restore previos address and etc.
+		emd_log(LOG_ERR, "open(%s) failed!: %s", fn, strerror(errno));
+		return;
+	}
+	fprintf(fp, "interface br0\n"
+		"start %s\n"
+		"end %s\n"
+		"option subnet %s",
+		start, end, net->mask);
+	fflush(fp);
+	fclose(fp);
+
+	// restart
+	system("/etc/init.d/net.br0 restart");
+}
+
 
 void calc_results_to_be64(struct calc_results *cr)
 {

@@ -136,7 +136,7 @@ int sock_tlv_send_recv(struct sock_tlv *st)
 			if (ret == -1)
 				return -1;
 			// отладочные сообщения каждые 100 мс
-			timeout = timer - 100 < 0? 0: timer - 100;
+			timeout = timeout - 100 < 0? 0: timeout - 100;
 			st->len  = st->cur;
 			memcpy(st->value, st->recv_buf, st->len);
 			st->cur -= decode(&st->rcount, &st->tag, st->value, &st->len);

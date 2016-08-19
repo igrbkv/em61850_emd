@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <sys/time.h>
+#include <arpa/inet.h>
 
 /* Протокол обмена.
  * 1. Формат пакета:
@@ -16,6 +17,7 @@
  */
 
 #define SV_ID_MAX_LEN 64
+#define VERSION_MAX_LEN 24
 
 enum REQ_CODES {
 	STATE_REQ = 1,
@@ -27,6 +29,8 @@ enum REQ_CODES {
 	GET_SYNC_PROP_REQ,
 	SET_SYNC_PROP_REQ,
 	GET_CALC_REQ,
+	GET_VERSION_REQ,
+	SET_NETWORK_REQ,
 };
 
 enum ERR_CODES {
@@ -153,4 +157,18 @@ typedef struct  __attribute__((__packed__)) calc {
 	uint8_t valid2;
 	uint8_t data[];
 } calc_resp; 
+
+typedef struct __attribute__((__packed__)) versions {
+	char emd[VERSION_MAX_LEN];
+	char adc[VERSION_MAX_LEN];
+	char sync[VERSION_MAX_LEN];
+} versions_resp;
+
+typedef struct __attribute__((__packed__)) network {
+	char addr[INET_ADDRSTRLEN];
+	char mask[INET_ADDRSTRLEN];
+	char gateway[INET_ADDRSTRLEN];
+} network;
+
+
 #endif

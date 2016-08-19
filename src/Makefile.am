@@ -2,7 +2,8 @@
 
 bin_PROGRAMS = emd
 
-emd_SOURCES = emd.c emd.h \
+emd_SOURCES = ../config.h \ 
+	emd.c emd.h \
 	tcp_server.h tcp_server.c \
 	server.h server.c \
 	log.c log.h debug.h \
@@ -18,7 +19,8 @@ emd_SOURCES = emd.c emd.h \
 AM_CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall
 #for debug: ./configure CFLAGS='-ggdb -O0'
 
-AM_CPPFLAGS = -I$(top_srcdir)
+#AM_CPPFLAGS = -I$(top_srcdir)
+AM_CPPFLAGS = -include $(top_srcdir)/config.h
 
 AM_LDFLAGS = -lpthread -lm -luv -lpcap
 #AM_LDFLAGS = -lrt -lpthread -lm -lcrypt

@@ -3,6 +3,8 @@
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <uv.h>
+#include <arpa/inet.h>
+#include <string.h>
 
 #include "emd.h"
 #include "log.h"
@@ -12,6 +14,8 @@
 //#include "debug.h"
 
 #define DEFAULT_BACKLOG 128
+
+char emd_ip4_addr[INET_ADDRSTRLEN];
 
 typedef struct {
 	uv_write_t req;
@@ -24,6 +28,7 @@ static void tcp_server_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *
 static void on_new_connection(uv_stream_t *server, int status);
 static void on_write(uv_write_t* req, int status);
 static void on_shutdown(uv_shutdown_t* req, int status);
+static void init_emd_ip4_addr();
 
 void on_close(uv_handle_t* handle)
 {
@@ -158,10 +163,44 @@ void on_new_connection(uv_stream_t *server, int status)
 	}
 }
 
+void init_emd_ip4_addr()
+{
+	uv_interface_address_t *info;
+	int count, i;
+
+	uv_interface_addresses(&info, &count);
+	i = count;
+
+	while (i--) {
+		uv_interface_address_t interface = info[i];
+
+		if (!interface.is_internal && 
+			interface.address.address4.sin_family == AF_INET &&
+			(strcmp("br0", interface.name) == 0 || 
+			(emd_ip4_addr[0] == '\0' && interface.name[0] == 'e')))
+			uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
+	}
+
+	uv_free_interface_addresses(info, count);
+}
+
+void inc_ip4_addr(char *dst, const char *src, int step)
+{
+	strcpy(dst, src);
+	char *p = strrchr(dst, '.');
+	if (p == NULL)
+		return;
+
+	p++;
+	snprintf(p, 4, "%d", atoi(p) + step);
+}
+
 int tcp_server_init()
 {
 	uv_tcp_t *server;
 	struct sockaddr_in addr;
+
+	init_emd_ip4_addr();
 		
 	server = (uv_tcp_t*) malloc(sizeof(*server));
 	
