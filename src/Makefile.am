@@ -13,6 +13,7 @@ emd_SOURCES = ../config.h \
 	adc_client.h adc_client.c \
 	sync_client.h sync_client.c \
 	calc.h calc.c \
+	calc_data.h calc_data.c \
 	settings.h settings.c \
 	proto.h
 

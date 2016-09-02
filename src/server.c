@@ -16,13 +16,14 @@
 #include "sync_client.h"
 #include "proto.h"
 #include "calc.h"
+#include "calc_data.h"
 
 #define MAX_DIFF_TIME 2
 
 int correct_time = 1; // Время усанавливается по планшету один раз за сессию
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
-static void calc_results_to_be64(struct calc_results *cr);
+static void calc_results_to_be64(struct calc_general *cr);
 static void set_network(const network *net);
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
@@ -189,38 +190,83 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		}
-		case GET_CALC_REQ: {
+		case GET_CALC_DATA_REQ: {
+			if (hdr->data_len != sizeof(struct calc_data_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_DATA_REQ error data size!");
+				return -1;
+			}
+			struct calc_data_req *req = (struct calc_data_req *)hdr->data; 
+
+			req->scale = ntohl(req->scale);
+			req->begin = ntohl(req->begin);
+			req->length = ntohl(req->length);
+			req->counts_limit = ntohl(req->counts_limit);
+
+			struct calc_data *cd;
+			int cd_size;
+			struct timeval ts; 
+			make_calc_data(req->idx1, req->idx2, req->scale, req->begin, req->length, req->counts_limit, &ts, &cd, &cd_size);
+			if (cd_size == 0)
+				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			else {
+				int len = sizeof(struct calc_resp) + cd_size;
+				pdu_t *resp = malloc(sizeof(pdu_t) + len);
+				resp->msg_code = hdr->msg_code;
+				resp->data_len = htons(len);
+				struct calc_resp *clc = (struct calc_resp *)resp->data;
+				clc->ts_sec = ts.tv_sec;
+				clc->ts_usec = ts.tv_usec;
+				clc->valid1 = cd->size1 != 0;
+				clc->valid2 = cd->size2 != 0;
+
+				cd->size1 = htonl(cd->size1);
+				cd->size2 = htonl(cd->size2);
+				for (int i = 0; i < cd->size1 + cd->size2; i++) {
+					uint32_t v = htonl(*(uint32_t *)&cd->data[i]);
+					cd->data[i] = *(float *)&v;
+				}
+			 
+				memcpy((struct calc_general *)clc->data, cd, cd_size);
+				free(cd);
+
+				*out = (void *)resp;
+				*out_len = sizeof(pdu_t) + len;
+			}
+			break;
+		} 
+
+		case GET_CALC_GENERAL_REQ: {
 			if (hdr->data_len != sizeof(struct calc_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
 				return -1;
 			}
 			struct calc_req *req = (struct calc_req *)hdr->data; 
 
-			struct calc_results *c1, *c2;
+			struct calc_general *c1, *c2;
 			int c1_size, c2_size;
 			struct timeval ts; 
 			make_calc(req->idx1, req->idx2, &ts, &c1, &c1_size, &c2, &c2_size);
 			if (c1_size == 0 && c2_size == 0)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 			else {
-				int len = sizeof(struct calc) + c1_size + c2_size;
+				int len = sizeof(struct calc_resp) + c1_size + c2_size;
 				pdu_t *resp = malloc(sizeof(pdu_t) + len);
 				resp->msg_code = hdr->msg_code;
 				resp->data_len = htons(len);
-				struct calc *clc = (struct calc *)resp->data;
+				struct calc_resp *clc = (struct calc_resp *)resp->data;
 				clc->ts_sec = ts.tv_sec;	//htobe64(ts.tv_sec);
 				clc->ts_usec = ts.tv_usec;	//htobe64(ts.tv_usec);
 				clc->valid1 = c1_size != 0;
 				clc->valid2 = c2_size != 0;
 				if (c1_size != 0) {
-					struct calc_results *cr = (struct calc_results *)clc->data;
+					struct calc_general *cr = (struct calc_general *)clc->data;
 					memcpy(cr, c1, c1_size);
 					calc_results_to_be64(cr);
 					free(c1);
 				}
 
 				if (c2_size != 0) {
-					struct calc_results *cr = (struct calc_results *)&clc->data[c1_size];
+					struct calc_general *cr = (struct calc_general *)&clc->data[c1_size];
 					memcpy(cr, c2, c2_size);
 					calc_results_to_be64(cr);
 					free(c2);
@@ -332,7 +378,7 @@ void set_network(const network *net)
 }
 
 
-void calc_results_to_be64(struct calc_results *cr)
+void calc_results_to_be64(struct calc_general *cr)
 {
 	// FIXME Не работает обратное приведение в андроиде
 	// Попробовать здесь и в андроиде 
@@ -352,6 +398,7 @@ void calc_results_to_be64(struct calc_results *cr)
 	*v = htobe64(*v);
 	v = (uint64_t *)&cr->thd;
 	*v = htobe64(*v);
+#if 0
 	for (int i = 0; i < cr->harmonics_num; i++) {
 		v = (uint64_t *)&cr->h[i].f;
 		*v = htobe64(*v);
@@ -360,6 +407,7 @@ void calc_results_to_be64(struct calc_results *cr)
 		v = (uint64_t *)&cr->h[i].ampl;
 		*v = htobe64(*v);
 	}
+#endif
 }
 
 void apply_time(int32_t client_time)

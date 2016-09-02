@@ -28,9 +28,11 @@ enum REQ_CODES {
 	SET_STREAMS_PROP_REQ,
 	GET_SYNC_PROP_REQ,
 	SET_SYNC_PROP_REQ,
-	GET_CALC_REQ,
 	GET_VERSION_REQ,
 	SET_NETWORK_REQ,
+	GET_CALC_GENERAL_REQ,
+	GET_CALC_DATA_REQ,
+	GET_CALC_HARMONICS_REQ,
 };
 
 enum ERR_CODES {
@@ -133,32 +135,50 @@ struct __attribute__((__packed__)) calc_req {
 	uint8_t idx2;
 };
 
-struct __attribute__((__packed__)) harmonic {
+typedef struct  __attribute__((__packed__)) calc_resp {
+	uint64_t ts_sec;	// timeval64
+	uint64_t ts_usec;	// timeval64
+	uint8_t valid1;
+	uint8_t valid2;
+	uint8_t data[];
+} calc_resp;
+
+struct __attribute__((__packed__)) calc_harmonic {
 	double f;
 	double k;
 	double ampl;
 };
 
-struct __attribute__((__packed__)) calc_results {
+struct __attribute__((__packed__)) calc_harmonics {
+	uint8_t harmonics_num;
+	struct calc_harmonic h[];
+};
+
+struct __attribute__((__packed__)) calc_general {
 	double rms;
 	double dc;
 	double f_1h;
 	double rms_1h;
 	double phi;
 	double thd;
-	uint8_t harmonics_num;
-	struct harmonic h[];
 };
 
-typedef struct  __attribute__((__packed__)) calc {
-	uint64_t ts_sec;	// timeval64
-	uint64_t ts_usec;	// timeval64
-	uint8_t valid1;
-	uint8_t valid2;
-	uint8_t data[];
-} calc_resp; 
+typedef struct __attribute__((__packed__)) calc_data_req {
+	uint8_t idx1;
+	uint8_t idx2;
+	uint32_t scale;
+	uint32_t begin;
+	uint32_t length;
+	uint32_t counts_limit;
+} calc_data_req;
 
-typedef struct __attribute__((__packed__)) versions {
+struct __attribute__((__packed__)) calc_data {
+	uint32_t size1;
+	uint32_t size2;
+	float data[];
+};
+
+typedef struct __attribute__((__packed__)) versions_resp {
 	char emd[VERSION_MAX_LEN];
 	char adc[VERSION_MAX_LEN];
 	char sync[VERSION_MAX_LEN];

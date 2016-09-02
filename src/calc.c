@@ -18,19 +18,18 @@ double Kf = 1.0;
 static int harmonics_count = 6;
 //static int subharmonics_count = 6;
 
-static void do_calculations(double *data, int len, struct calc_results **calc_res, int *calc_res_size); 
+static void do_calculations(double *data, int len, struct calc_general **calc_res, int *calc_res_size); 
 static double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb);
 static unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned int max_index, double ar[], unsigned int sb, const double t_samp); 
 static void general_transform(double inp_v[], double out_v[], unsigned int num_samples, int dir); 
 static void dfour1(double data[], unsigned int nn2, int isign);
-static double scaleFactor(int idx);
 
 // @param idx1: idx of signal of stream 1
 // @param idx2: idx of signal of stream 1 or 2
 // @param  ts: time stamp
 // @param  c1: values of signal 1
 // @param  c2: values of signal 2
-void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_results **c1, int *c1_size, struct calc_results **c2, int *c2_size)
+void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_general **c1, int *c1_size, struct calc_general **c2, int *c2_size)
 {
 	sv_data *s1, *s2;
 	int s1_size = 0, s2_size = 0;
@@ -177,7 +176,7 @@ double scaleFactor(int idx)
 	return idx%STREAM2_START_IDX < PHASES_NUM? 0.001: 0.01;
 }
 
-void do_calculations(double *data, int len, struct calc_results **calc_res, int *calc_size) 
+void do_calculations(double *data, int len, struct calc_general **calc_res, int *calc_size) 
 {
 	int v_size = len - EQ_TRAILS;
 	double *data_complex_out;
@@ -235,7 +234,11 @@ void do_calculations(double *data, int len, struct calc_results **calc_res, int 
 	const int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
 	const int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
 
+#if 0 
 	*calc_size = sizeof(struct calc_results) + sizeof(struct harmonic)*(max_harm > 2? max_harm - 2: 0);
+#endif
+	*calc_size = sizeof(struct calc_general);
+
 	*calc_res = malloc(*calc_size);
 
 	double thd = 0.;
@@ -245,15 +248,19 @@ void do_calculations(double *data, int len, struct calc_results **calc_res, int 
 		
 		double ar_cur[3];		
 		i_max = rev_win_han_scan(ampl_spectre, idx - 1, idx + 1, ar_cur, len, t_samp);
-
+#if 0
 		(*calc_res)->h[i-2].f = ar_cur[0];
 		(*calc_res)->h[i-2].k = ar_cur[1];
 		(*calc_res)->h[i-2].ampl = ar_cur[2];
+#endif
 		thd += pow(ar_cur[2], 2);
 	}
 	thd = sqrt(thd) / ar[2];
 
+#if 0
 	(*calc_res)->harmonics_num = max_harm < 2? 0: max_harm - 2;
+#endif
+
 	(*calc_res)->rms = rms_wh;
 	(*calc_res)->dc = mean_wh;
 	(*calc_res)->f_1h = ar[0];

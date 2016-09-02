@@ -5,6 +5,8 @@
 #include <uv.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <unistd.h>
+#include <ifaddrs.h>
 
 #include "emd.h"
 #include "log.h"
@@ -167,17 +169,45 @@ void init_emd_ip4_addr()
 {
 	uv_interface_address_t *info;
 	int count, i;
+	// FIXME br0 not working without enp1s0
+	// Либо
+	//  Сделать сервис по типу net, который проверяет
+	// наличие enp1s0 и provide mynet
+	// Сервис emd сделать зависимым от mynet(need mynet)
+	// либо
+	// Поправить сервис net.lo
+#define MAX_ATTEMPTS 10
+	int base_iface_inited = 0;
+	for (int j = 0; j < MAX_ATTEMPTS; j++) {
+		uv_interface_addresses(&info, &count);
+		i = count;
+		while (i--) {
+			uv_interface_address_t interface = info[i];
 
+			if (!interface.is_internal && 
+				interface.address.address4.sin_family == AF_INET &&
+				strcmp("enp1s0", interface.name) == 0) {
+				base_iface_inited = 1;
+				break;
+			}
+		}
+
+		uv_free_interface_addresses(info, count);
+		if (base_iface_inited)
+			break;
+		sleep(1);
+	}
+
+	// ipv4
 	uv_interface_addresses(&info, &count);
 	i = count;
-
 	while (i--) {
 		uv_interface_address_t interface = info[i];
 
 		if (!interface.is_internal && 
 			interface.address.address4.sin_family == AF_INET &&
 			(strcmp("br0", interface.name) == 0 || 
-			(emd_ip4_addr[0] == '\0' && interface.name[0] == 'e')))
+			emd_ip4_addr[0] == '\0'))
 			uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
 	}
 
@@ -206,7 +236,7 @@ int tcp_server_init()
 	
 	uv_tcp_init(uv_default_loop(), server);
 
-	uv_ip4_addr("0.0.0.0", emd_port, &addr);
+	uv_ip4_addr(emd_ip4_addr, emd_port, &addr);
 
 	uv_tcp_bind(server, (const struct sockaddr*)&addr, 0);
 	int ret = uv_listen((uv_stream_t*) server, DEFAULT_BACKLOG, on_new_connection);
