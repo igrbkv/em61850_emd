@@ -5,6 +5,7 @@
 #include "proto.h"
 #include "sv_read.h"
 #include "settings.h"
+#include "calc.h"
 
 #include "debug.h"
 #ifdef DEBUG

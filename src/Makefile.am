@@ -2,7 +2,7 @@
 
 bin_PROGRAMS = emd
 
-emd_SOURCES = ../config.h \ 
+emd_SOURCES = ../config.h \
 	emd.c emd.h \
 	tcp_server.h tcp_server.c \
 	server.h server.c \

@@ -219,12 +219,12 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				clc->valid1 = cd->size1 != 0;
 				clc->valid2 = cd->size2 != 0;
 
-				cd->size1 = htonl(cd->size1);
-				cd->size2 = htonl(cd->size2);
-				for (int i = 0; i < cd->size1 + cd->size2; i++) {
-					uint32_t v = htonl(*(uint32_t *)&cd->data[i]);
+				for (int i = 0; i < (cd->size1 + cd->size2); i++) {
+					uint32_t v = htonl(*((uint32_t *)&cd->data[i]));
 					cd->data[i] = *(float *)&v;
 				}
+				cd->size1 = htonl(cd->size1);
+				cd->size2 = htonl(cd->size2);
 			 
 				memcpy((struct calc_general *)clc->data, cd, cd_size);
 				free(cd);

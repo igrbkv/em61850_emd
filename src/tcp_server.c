@@ -186,7 +186,8 @@ void init_emd_ip4_addr()
 
 			if (!interface.is_internal && 
 				interface.address.address4.sin_family == AF_INET &&
-				strcmp("enp1s0", interface.name) == 0) {
+				interface.name[0] == 'e') {
+				uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
 				base_iface_inited = 1;
 				break;
 			}
@@ -207,8 +208,10 @@ void init_emd_ip4_addr()
 		if (!interface.is_internal && 
 			interface.address.address4.sin_family == AF_INET &&
 			(strcmp("br0", interface.name) == 0 || 
-			emd_ip4_addr[0] == '\0'))
+			emd_ip4_addr[0] == '\0')) {
 			uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
+			break;
+		}
 	}
 
 	uv_free_interface_addresses(info, count);
