@@ -28,36 +28,42 @@ static void set_network(const network *net);
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
-	struct err_resp *buf = malloc(sizeof(struct err_resp));
-	buf->msg_code = code | 0x80;
-	buf->err_code = err;
-	*msg = buf;
-	*len = sizeof(struct err_resp);
+	int sz = sizeof(pdu_t) + sizeof(struct err_resp);
+	pdu_t *resp = malloc(sz);
+	resp->len = htons(sz);
+	resp->msg_code = code | 0x80;
+	struct err_resp *er = (struct err_resp *)resp->data;
+	er->err_code = err;
+	*msg = resp;
+	*len = sz;
 }
 
 // confirmation = empty msg
 void make_confirmation(uint8_t code, void **msg, int *len)
 {
-	pdu_t *resp = malloc(sizeof(pdu_t));
+	int sz = sizeof(pdu_t);
+	pdu_t *resp = malloc(sz);
 	resp->msg_code = code;
-	resp->data_len = htons(0);
+	resp->len = htons(sz);
 	*msg = (void *)resp;
-	*len = sizeof(pdu_t);
+	*len = sz;
 }
 
 int parse_request(void *in, int in_len, void **out, int *out_len)
 {
+	int len;
 	if (in_len < sizeof(pdu_t)) {
 		emd_log(LOG_DEBUG, "request size is too small!");
 		return -1;
 	}
 
 	pdu_t *hdr = (pdu_t *)in;
-	hdr->data_len = ntohs(hdr->data_len);
+	hdr->len = ntohs(hdr->len);
+	int data_len = hdr->len - sizeof(pdu_t);
 
 	switch (hdr->msg_code) {
 		case SET_TIME_REQ: {
-			if (hdr->data_len != sizeof(struct set_time_req)) {
+			if (data_len != sizeof(struct set_time_req)) {
 				emd_log(LOG_DEBUG, "SET_TIME_REQ error data size!");
 				return -1;
 			}				
@@ -69,14 +75,15 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 		}
 
 		case STATE_REQ: {
-			if (hdr->data_len != 0) {
+			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "STATE_REQ error data size!");
 				return -1;
 			}				
 
-			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(struct state_resp));
+			len = sizeof(pdu_t) + sizeof(struct state_resp);
+			pdu_t *resp = malloc(len);
 			resp->msg_code = hdr->msg_code;
-			resp->data_len = htons(sizeof(struct state_resp));
+			resp->len = htons(len);
 			struct state_resp *s = (struct state_resp *)resp->data;
 			// set current state
 			int strm1, strm2;
@@ -85,29 +92,30 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				(strm2? STREAM2_OK: 0);
 
 			*out = (void *)resp;
-			*out_len = sizeof(pdu_t) + sizeof(struct state_resp);
+			*out_len = len;
 			break;
 		}
 		case GET_ADC_PROP_REQ: {
-			if (hdr->data_len != 0) {
+			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_ADC_REQ error data size!");
 				return -1;
 			}
 			if (adc_prop_valid) {
-				pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(adc_prop_resp));
+				len = sizeof(pdu_t) + sizeof(adc_prop_resp);
+				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(sizeof(adc_prop_resp));
+				resp->len = htons(len);
 				adc_prop_resp *data = (adc_prop_resp *)resp->data;
 				*data = adc_prop;
 				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + sizeof(adc_prop_resp);
+				*out_len = len;
 			} else
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 
 			break;
 		} 
 		case SET_ADC_PROP_REQ: {
-			if (hdr->data_len != sizeof(adc_prop_resp)) {
+			if (data_len != sizeof(adc_prop_resp)) {
 				emd_log(LOG_DEBUG, "SET_ADC_REQ error data size!");
 				return -1;
 			}
@@ -121,14 +129,14 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		}
 		case GET_STREAMS_PROP_REQ: {
-			if (hdr->data_len != 0) {
+			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_STREAMS_REQ error data size!");
 				return -1;
 			}
-			
-			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(streams_prop_resp));
+			len = sizeof(pdu_t) + sizeof(streams_prop_resp);
+			pdu_t *resp = malloc(len);
 			resp->msg_code = hdr->msg_code;
-			resp->data_len = htons(sizeof(streams_prop_resp));
+			resp->len = htons(len);
 			streams_prop_resp *data = (streams_prop_resp *)resp->data;
 
 			memcpy(data, &streams_prop, sizeof(streams_prop_resp));
@@ -137,11 +145,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			data->u_trans_coef2 = htonl(data->u_trans_coef2);
 			data->i_trans_coef2 = htonl(data->i_trans_coef2);
 			*out = (void *)resp;
-			*out_len = sizeof(pdu_t) + sizeof(streams_prop_resp);
+			*out_len = len;
 			break;
 		} 
 		case SET_STREAMS_PROP_REQ: {
-			if (hdr->data_len != sizeof(streams_prop_resp)) {
+			if (data_len != sizeof(streams_prop_resp)) {
 				emd_log(LOG_DEBUG, "SET_STREAMS_PROP_REQ error data size!");
 				return -1;
 			}
@@ -160,25 +168,26 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		}
 		case GET_SYNC_PROP_REQ: {
-			if (hdr->data_len != 0) {
+			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_SYNC_PROP_REQ error data size!");
 				return -1;
 			}
 			if (sync_prop_valid) {
-				pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(sync_prop_resp));
+				len = sizeof(pdu_t) + sizeof(sync_prop_resp);
+				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(sizeof(sync_prop_resp));
+				resp->len = htons(len);
 				sync_prop_resp *data = (sync_prop_resp *)resp->data;
 				*data = sync_prop;
 				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + sizeof(sync_prop_resp);
+				*out_len = len;
 			} else
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 
 			break;
 		} 
 		case SET_SYNC_PROP_REQ: {
-			if (hdr->data_len != sizeof(sync_prop_resp)) {
+			if (data_len != sizeof(sync_prop_resp)) {
 				emd_log(LOG_DEBUG, "SET_SYNC_PROP_REQ error data size!");
 				return -1;
 			}
@@ -191,7 +200,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		}
 		case GET_CALC_DATA_REQ: {
-			if (hdr->data_len != sizeof(struct calc_data_req)) {
+			if (data_len != sizeof(struct calc_data_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_DATA_REQ error data size!");
 				return -1;
 			}
@@ -209,10 +218,10 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (cd_size == 0)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 			else {
-				int len = sizeof(struct calc_resp) + cd_size;
-				pdu_t *resp = malloc(sizeof(pdu_t) + len);
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + cd_size;
+				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(len);
+				resp->len = htons(len);
 				struct calc_resp *clc = (struct calc_resp *)resp->data;
 				clc->ts_sec = ts.tv_sec;
 				clc->ts_usec = ts.tv_usec;
@@ -230,13 +239,13 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				free(cd);
 
 				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + len;
+				*out_len = len;
 			}
 			break;
 		} 
 
 		case GET_CALC_GENERAL_REQ: {
-			if (hdr->data_len != sizeof(struct calc_req)) {
+			if (data_len != sizeof(struct calc_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
 				return -1;
 			}
@@ -249,10 +258,10 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (c1_size == 0 && c2_size == 0)
 				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
 			else {
-				int len = sizeof(struct calc_resp) + c1_size + c2_size;
-				pdu_t *resp = malloc(sizeof(pdu_t) + len);
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + c1_size + c2_size;
+				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
-				resp->data_len = htons(len);
+				resp->len = htons(len);
 				struct calc_resp *clc = (struct calc_resp *)resp->data;
 				clc->ts_sec = ts.tv_sec;	//htobe64(ts.tv_sec);
 				clc->ts_usec = ts.tv_usec;	//htobe64(ts.tv_usec);
@@ -273,28 +282,29 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				}
 
 				*out = (void *)resp;
-				*out_len = sizeof(pdu_t) + len;
+				*out_len = len;
 			}
 			break;
 		} 
 		case GET_VERSION_REQ: {
-			if (hdr->data_len != 0) {
+			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_VERSION_REQ error data size!");
 				return -1;
 			}
-			pdu_t *resp = malloc(sizeof(pdu_t) + sizeof(versions_resp));
+			len = sizeof(pdu_t) + sizeof(versions_resp);
+			pdu_t *resp = malloc(len);
 			resp->msg_code = hdr->msg_code;
-			resp->data_len = htons(sizeof(versions_resp));
+			resp->len = htons(len);
 			versions_resp *data = (versions_resp *)resp->data;
 			strncpy(data->emd, VERSION, VERSION_MAX_LEN);
 			strncpy(data->adc, adc_version, VERSION_MAX_LEN);
 			strncpy(data->sync, sync_version, VERSION_MAX_LEN);
 			*out = (void *)resp;
-			*out_len = sizeof(pdu_t) + sizeof(versions_resp);
+			*out_len = len;
 			break;
 		}
 		case SET_NETWORK_REQ: {
-			if (hdr->data_len != sizeof(network)) {
+			if (data_len != sizeof(network)) {
 				emd_log(LOG_DEBUG, "SET_NETWORK_REQ error data size!");
 				return -1;
 			}
@@ -308,7 +318,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 	}
 
-	return sizeof(pdu_t) + hdr->data_len;;
+	return hdr->len;
 }
 
 void set_network(const network *net)

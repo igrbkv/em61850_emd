@@ -40,13 +40,12 @@ enum ERR_CODES {
 };
 
 typedef struct __attribute__((__packed__)) pdu {
+	uint16_t len;
 	int8_t msg_code;
-	uint16_t data_len;
 	int8_t data[];
 } pdu_t;
 
 struct __attribute__((__packed__)) err_resp {
-	int8_t msg_code;
 	uint8_t err_code;
 };
 

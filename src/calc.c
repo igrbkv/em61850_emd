@@ -32,8 +32,8 @@ static void dfour1(double data[], unsigned int nn2, int isign);
 // @param  c2: values of signal 2
 void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_general **c1, int *c1_size, struct calc_general **c2, int *c2_size)
 {
-	sv_data *s1, *s2;
-	int s1_size = 0, s2_size = 0;
+	sv_data *s1, *s2, *s = NULL;
+	int s1_size = 0, s2_size = 0, s_size;
 	int stream2 = (idx1 >= STREAM2_START_IDX) || (idx2 >= STREAM2_START_IDX);
 	int stream1 = (idx1 < STREAM2_START_IDX) || (idx2 < STREAM2_START_IDX);
 
@@ -45,48 +45,39 @@ void make_calc(int idx1, int idx2, struct timeval *ts, struct calc_general **c1,
 		return;
 
 	double *values = calloc(s1_size > s2_size? s1_size: s2_size, sizeof(double));
-
-	if (s1_size) {
-		double sf = scaleFactor(idx1);
-		for (int i = 0; i < s1_size; i++) {
-			int v = s1[i].values[idx1*2];
-			values[i] = sf*(double)v;
-		}
-
-		do_calculations(values, s1_size, c1, c1_size);
-
-		if (!stream2) {
-			double sf = scaleFactor(idx2);
-			for (int i = 0; i < s1_size; i++) {
-				int v = s1[i].values[idx2*2];
-				values[i] = sf*(double)v;
-			}
-
-			do_calculations(values, s1_size, c2, c2_size);
-		}
-	}
 	
-	if (s2_size) {
-		int idx;
-		if (!stream1) {
-			idx = idx1 % STREAM2_START_IDX;
-			double sf = scaleFactor(idx);
-			for (int i = 0; i < s2_size; i++) {
-				int v = s2[i].values[idx*2];
-				values[i] = sf*(double)v;
-			}
-
-			do_calculations(values, s2_size, c1, c1_size);
-		}
-
-		idx = idx2 % STREAM2_START_IDX;
-		double sf = scaleFactor(idx);
-		for (int i = 0; i < s2_size; i++) {
-			int v = s2[i].values[idx*2];
+	if (idx1 < STREAM2_START_IDX && s1_size) {
+		s = s1;
+		s_size = s1_size;
+	} else if (idx1 >= STREAM2_START_IDX && s2_size) {
+		idx1 %= STREAM2_START_IDX;
+		s = s2;
+		s_size = s2_size;
+	}
+	if (s) {
+		double sf = scaleFactor(idx1);
+		for (int i = 0; i < s_size; i++) {
+			int v = s[i].values[idx1*2];
 			values[i] = sf*(double)v;
 		}
+		do_calculations(values, s_size, c1, c1_size);
+	}
 
-		do_calculations(values, s2_size, c2, c2_size);
+	if (idx2 < STREAM2_START_IDX && s1_size) {
+		s = s1;
+		s_size = s1_size;
+	} else if (idx2 >= STREAM2_START_IDX && s2_size) {
+		idx2 %= STREAM2_START_IDX;
+		s = s2;
+		s_size = s2_size;
+	}
+	if (s) {
+		double sf = scaleFactor(idx1);
+		for (int i = 0; i < s_size; i++) {
+			int v = s[i].values[idx2*2];
+			values[i] = sf*(double)v;
+		}
+		do_calculations(values, s_size, c2, c2_size);
 	}
 
 	if (dump) {
