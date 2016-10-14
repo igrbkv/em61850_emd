@@ -31,8 +31,6 @@
  * pdu => cur (second) => ready (2 seconds)
  */
 
-#define FREQUENCY 50
-#define SMP_BY_SECOND_MAX 1280*FREQUENCY
 #define BUFFERED_SECONDS 4
 
 #ifndef LOCAL_DEBUG
@@ -65,7 +63,7 @@ typedef struct {
 	uint16_t smp_cnt;
 	uint16_t last_smp;
 	uint16_t rate;
-	sv_data data[SMP_BY_SECOND_MAX];
+	sv_data data[RATE_MAX];
 } sv_data_second;
 
 typedef struct {
@@ -89,6 +87,7 @@ typedef struct {
 	u_int64_t err_type;
 	u_int64_t err_size;
 	u_int64_t err_sv_id;
+	u_int64_t err_rate;
 	u_int64_t smp_dropped[2];
 	u_int64_t timeout[2];
 } statistic;
@@ -135,6 +134,7 @@ static void cur_to_ready();
 #ifdef LOCAL_DEBUG 
 static void print_statistic(bool finish);
 #endif
+sv_data_second *s1_buf, *s2_buf;
 
 int sv_read_init()
 {
@@ -168,6 +168,9 @@ int sv_read_init()
 	memset(cur, 0, sizeof(sv_data_second)*2);
 	st = (statistic *)malloc(sizeof(statistic));
 	memset(st, 0, sizeof(statistic));
+	s1_buf = malloc(sizeof(sv_data_second));
+	s2_buf = malloc(sizeof(sv_data_second));
+
 	pdu = (sv_pdu *)malloc(sizeof(sv_pdu)); 
 	errbuf = (char *)malloc(PCAP_ERRBUF_SIZE);
 	timeout.tv_sec = 0;
@@ -195,6 +198,8 @@ int sv_read_close()
 		uv_thread_join(&thread);
 #endif
 	}
+	free(s1_buf);
+	free(s2_buf);
 	free(ready);
 	free(cur);
 	free(pdu);
@@ -447,6 +452,10 @@ int parse_tlv(const u_char *p, int *size)
 		case T_SMP_RATE:
 			// FIXME smp_rate must be by second, not by period
 			pdu->rate = ntohs(*(u_int16_t *)p) * FREQUENCY;
+			if (pdu->rate > RATE_MAX) {
+				st->err_rate++;
+				return -1;
+			}
 			break;
 		case T_SMP_SYNC:
 			pdu->asdus[pdu->cur_asdu].smp_sync = *p;
@@ -531,7 +540,7 @@ void cur_to_ready()
 
 int time_equal(int i1, int i2)
 {
-	struct timeval tv, err_threshold = {0, 100000};	// 100 ms
+	struct timeval tv, err_threshold = {0, 300000};	// 300 ms
 	if (timercmp(&ready[i1].ts, &ready[i2].ts, >)) {
 		timersub(&ready[i1].ts, &ready[i2].ts, &tv);
 		if (timercmp(&tv, &err_threshold, < ))
@@ -546,17 +555,8 @@ int time_equal(int i1, int i2)
 
 int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_data **stream2, int *stream2_size)
 {
-	sv_data_second *s1, *s2;
-	sv_data *stm1, *stm2;
-
-	if (stream1) {
-		s1 = malloc(sizeof(sv_data_second));
-		s1->rate = 0;
-	} else s1 = NULL;
-	if (stream2) {
-		s2 = malloc(sizeof(sv_data_second));
-		s2->rate = 0;
-	} else s2 = NULL;
+	s1_buf->rate = 0;
+	s2_buf->rate = 0;
 	int i1 = -1, i2 = -1;
 
 #ifndef LOCAL_DEBUG
@@ -564,9 +564,9 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 #endif
 
 	if(stream1 && !stream2)
-		*s1 = ready[0];
+		*s1_buf = ready[0];
 	else if (!stream1 && stream2)
-		*s2 = ready[2];
+		*s2_buf = ready[2];
 	else if (stream1 && stream2) {
 		if (time_equal(0, 2)) {
 			i1 = 0; i2 = 2;
@@ -578,9 +578,9 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 			i1 = 1; i2 = 3;
 		}
 		if (i1 != -1 && (ready[i1].ts.tv_sec || ready[i1].ts.tv_usec))
-			memcpy(s1, &ready[i1], sizeof(sv_data_second));
+			memcpy(s1_buf, &ready[i1], sizeof(sv_data_second));
 		if (i2 != -1 && (ready[i2].ts.tv_sec || ready[i2].ts.tv_usec))
-			memcpy(s2, &ready[i2], sizeof(sv_data_second));
+			memcpy(s2_buf, &ready[i2], sizeof(sv_data_second));
 	}
 
 #ifndef LOCAL_DEBUG 
@@ -589,36 +589,27 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 
 	*ts = (struct timeval){0, 0};
 	if (stream1) {
-		if (s1->rate) {
-			*ts = s1->ts;
-			stm1 = malloc(s1->rate * sizeof(*stm1));
-			*stream1_size = s1->rate;
-			for (int i = 0; i < s1->rate; i++)
-				stm1[i] = s1->data[i];
-			*stream1 = stm1;
+		if (s1_buf->rate) {
+			*ts = s1_buf->ts;
+			*stream1_size = s1_buf->rate;
+			stream1 = s1_buf->data;
 		}
 		else {
-			*stream1 = NULL;
 			*stream1_size = 0;
+			*stream1 = 0;
 		}
 	}
 	if (stream2) {
-		if (s2->rate) {
-			*ts = s2->ts;
-			stm2 = malloc(s2->rate * sizeof(*stm2));
-			*stream2_size = s2->rate;
-			for (int i = 0; i < s2->rate; i++)
-				stm2[i] = s2->data[i];
-			*stream2 = stm2;
+		if (s2_buf->rate) {
+			*ts = s2_buf->ts;
+			*stream2_size = s2_buf->rate;
+			stream2 = s2->data;
 		}
 		else {
-			*stream2 = NULL;
 			*stream2_size = 0;
+			*stream2 = 0;
 		}
 	}
-	
-	free(s1);
-	free(s2);
 
 	return 0;
 }

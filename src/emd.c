@@ -20,6 +20,7 @@
 #include <uv.h>
 
 #include "emd.h"
+#include "calc.h"
 #include "tcp_server.h"
 #include "adc_client.h"
 #include "sync_client.h"
@@ -88,7 +89,8 @@ int main(int argc, char **argv)
 
 	loop = uv_default_loop();
 
-	if (tcp_server_init() == -1 ||
+	if (calc_init() == -1 ||
+		tcp_server_init() == -1 ||
 		adc_client_init() == -1 ||
 		sync_client_init() == -1 ||
 		sv_read_init() == -1)
@@ -128,16 +130,17 @@ static void open_log(void)
 }
 
 static void cleanup()
-{
-	tcp_server_close();
-	sync_client_close();
-	adc_client_close();
-	sv_read_close();
-
+{	
 	if (loop != NULL) {
 		uv_loop_close(loop);
 		loop = NULL;
 	}
+
+	tcp_server_close();
+	sync_client_close();
+	adc_client_close();
+	sv_read_close();
+	calc_close();
 }
 
 void clean_exit_with_status(int status)
@@ -167,7 +170,8 @@ static void reload_conf(int sig __attribute__((unused)))
 		goto err;
 	
 	loop = uv_default_loop();
-	if (tcp_server_init() == -1 ||
+	if (calc_close() == -1 ||
+		tcp_server_init() == -1 ||
 		adc_client_init() == -1 ||
 		sync_client_init() == -1 ||
 		sv_read_init() == -1)

@@ -1,6 +1,8 @@
 #ifndef SV_READ_H_
 #define SV_READ_H_
 
+#define FREQUENCY 50
+#define RATE_MAX 256*FREQUENCY
 #define VALUES_NUM 16
 
 typedef struct {

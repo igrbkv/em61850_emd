@@ -33,10 +33,17 @@ enum REQ_CODES {
 	GET_CALC_GENERAL_REQ,
 	GET_CALC_DATA_REQ,
 	GET_CALC_HARMONICS_REQ,
+	GET_CALC_POWER_REQ,
 };
 
 enum ERR_CODES {
-	NOT_AVAILABLE
+	ERR_RETRY = 2,
+	ERR_NOT_AVAILABLE
+};
+
+struct timeval64 {
+	uint64_t ts_sec;
+	uint64_t ts_usec;
 };
 
 typedef struct __attribute__((__packed__)) pdu {
@@ -130,17 +137,23 @@ typedef struct sync_properties sync_prop_resp;
 // 0..7  (Ia..Un) for stream 1
 // 8..15 (Ia..Un) for stream 2
 struct __attribute__((__packed__)) calc_req {
-	uint8_t idx1;
-	uint8_t idx2;
+	timeval64 time_stamp;
+	uint8_t stream[2];
 };
 
-typedef struct  __attribute__((__packed__)) calc_resp {
-	uint64_t ts_sec;	// timeval64
-	uint64_t ts_usec;	// timeval64
-	uint8_t valid1;
-	uint8_t valid2;
-	uint8_t data[];
-} calc_resp;
+struct __attribute__((__packed__)) calc_comparator {
+	double rms;
+	double dc;
+	double f_1h;
+	double rms_1h;
+	double phi;
+	double thd;
+};
+
+struct  __attribute__((__packed__)) calc_comparator_resp {
+	calc_req resp;
+	calc_comparator val[];
+}; 
 
 struct __attribute__((__packed__)) calc_harmonic {
 	double f;
@@ -189,5 +202,15 @@ typedef struct __attribute__((__packed__)) network {
 	char gateway[INET_ADDRSTRLEN];
 } network;
 
+typedef struct __attribute__((__packed__)) calc_power {
+	double u_rms;
+	double i_rms;
+	double u_phi;
+	double i_phi;
+	double phi;
+	double p;
+	double q;
+	double s;
+} calc_power;
 
 #endif
