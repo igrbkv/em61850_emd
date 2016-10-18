@@ -5,8 +5,6 @@
 #define _DEFAULT_SOURCE		// for daemon
 #include <unistd.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <signal.h>

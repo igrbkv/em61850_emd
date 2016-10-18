@@ -26,6 +26,7 @@ static void apply_time(int32_t client_time);
 static void calc_results_to_be64(struct calc_general *cr);
 static void calc_power_to_be64(struct calc_power *cp);
 static void set_network(const network *net);
+static int phases(calc_req *req)
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -37,6 +38,19 @@ void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 	er->err_code = err;
 	*msg = resp;
 	*len = sz;
+}
+
+int phases(calc_req *req)
+{
+	int ret = 0;
+	for (int i = 0; i < 8; i++) {
+		uint8_t bit = 0x1 << i;
+		if (req->stream[0] & bit)
+			ret++;
+		if (req->stream[1] & bit)
+			ret++;
+	}
+	return ret;
 }
 
 // confirmation = empty msg
@@ -245,42 +259,26 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		} 
 
-		case GET_CALC_GENERAL_REQ: {
+		case GET_CALC_COMPARATOR_REQ: {
 			if (data_len != sizeof(struct calc_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
 				return -1;
 			}
 			struct calc_req *req = (struct calc_req *)hdr->data; 
 
-			struct calc_general *c1, *c2;
-			int c1_size, c2_size;
-			struct timeval ts; 
-			make_calc(req->idx1, req->idx2, &ts, &c1, &c1_size, &c2, &c2_size);
-			if (c1_size == 0 && c2_size == 0)
-				make_err_resp(hdr->msg_code, NOT_AVAILABLE, out, out_len);
+			struct calc_comparator cc[PHASES_IN_STREAM*2];
+			int ret = make_comparator_calc(req, &cc);
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, ret, out, out_len);
 			else {
-				len = sizeof(pdu_t) + sizeof(struct calc_resp) + c1_size + c2_size;
+				int phs = phases(req);
+				len = sizeof(pdu_t) + sizeof(struct calc_comparator_resp) + sizeof(calc_comparator)*phs;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = htons(len);
-				struct calc_resp *clc = (struct calc_resp *)resp->data;
-				clc->ts_sec = ts.tv_sec;	//htobe64(ts.tv_sec);
-				clc->ts_usec = ts.tv_usec;	//htobe64(ts.tv_usec);
-				clc->valid1 = c1_size != 0;
-				clc->valid2 = c2_size != 0;
-				if (c1_size != 0) {
-					struct calc_general *cr = (struct calc_general *)clc->data;
-					memcpy(cr, c1, c1_size);
-					calc_results_to_be64(cr);
-					free(c1);
-				}
-
-				if (c2_size != 0) {
-					struct calc_general *cr = (struct calc_general *)&clc->data[c1_size];
-					memcpy(cr, c2, c2_size);
-					calc_results_to_be64(cr);
-					free(c2);
-				}
+				struct calc_comparator_resp *ccr = (struct calc_comparator_resp *)resp->data;
+				*ccr = *req;
+				memcpy(ccr->data, cc, sizeof(calc_comparator)*phs);
 
 				*out = (void *)resp;
 				*out_len = len;

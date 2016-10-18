@@ -3,7 +3,8 @@
 
 #define FREQUENCY 50
 #define RATE_MAX 256*FREQUENCY
-#define VALUES_NUM 16
+#define PHASES_IN_STREAM 8
+#define VALUES_NUM (PHASES_IN_STREAM*2)
 
 typedef struct {
 	union {

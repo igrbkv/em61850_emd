@@ -2,6 +2,29 @@
 
 #include "calc.h"
 
+struct calc_fft {
+	double *b;
+	double *bb;
+	double *vvv;
+};
+
+static calc_fft fft;
+
+void alloc_fft(int samples_num)
+{
+	int fft_sz = (2 << ((int)(floor(log(4*samples_num -1)/log(2.)))-1))<<1; 
+	fft.b = calloc(fft_sz, sizeof(double));
+	fft.bb = calloc(fft_sz, sizeof(double));
+	fft.vvv = calloc(fft_sz, sizeof(double));
+}
+
+void free_fft()
+{
+	free(fft.b);
+	free(fft.bb);
+	free(fft.vvv);
+}
+
 double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb) 
 {
 	double ar[3];
@@ -80,9 +103,9 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
 	unsigned int ne, nn;
 	double pp, arg, pn, bk, bk1;
 
-	double* b;
-	double* bb;
-	double* vvv;
+	double* b = fft.b;
+	double* bb = fft.bb;
+	double* vvv = fft.vvv;
 
     pp = log(4 * num_samples - 1.) / log(2.);
     p = floor(pp);
@@ -90,9 +113,6 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
 
     ne = esize << 1;
 
-	b = calloc(ne, sizeof(double)); 
-	bb = calloc(ne, sizeof(double)); 
-	vvv = calloc(ne, sizeof(double)); 
 	memset(b, 0, sizeof(double)*ne);
 	memset(vvv, 0, sizeof(double)*ne);
 
@@ -137,10 +157,6 @@ void general_transform(double inp_v[], double out_v[], unsigned int num_samples,
         out_v[k]  = (vvv[k] * bb[k] + vvv[k+1] * bb[k+1]);
         out_v[k+1] = (vvv[k+1] * bb[k] - vvv[k] * bb[k+1]);
 	}
-
-	free(b);
-	free(bb);
-	free(vvv);
 }
 
 void dfour1(double data[], unsigned int nn2, int isign) {

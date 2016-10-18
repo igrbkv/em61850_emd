@@ -7,13 +7,12 @@
 
 /* Протокол обмена.
  * 1. Формат пакета:
- *		1 байт - код сообщения
  *		2 байта (unsigned short) - длина данных
+ *		1 байт - код сообщения
  *		<длина_данных> байт - данные
- * 
+ *
  *		Коды 0-127, запрос и ответ, если ошибка,
- *		то первый бит кода ответа выставить в 1, а
- *		в длину данных записать код ошибки.
+ *		то первый бит кода ответа выставить в 1
  */
 
 #define SV_ID_MAX_LEN 64
@@ -30,7 +29,7 @@ enum REQ_CODES {
 	SET_SYNC_PROP_REQ,
 	GET_VERSION_REQ,
 	SET_NETWORK_REQ,
-	GET_CALC_GENERAL_REQ,
+	GET_CALC_COMPARATOR_REQ,
 	GET_CALC_DATA_REQ,
 	GET_CALC_HARMONICS_REQ,
 	GET_CALC_POWER_REQ,
@@ -39,11 +38,6 @@ enum REQ_CODES {
 enum ERR_CODES {
 	ERR_RETRY = 2,
 	ERR_NOT_AVAILABLE
-};
-
-struct timeval64 {
-	uint64_t ts_sec;
-	uint64_t ts_usec;
 };
 
 typedef struct __attribute__((__packed__)) pdu {
@@ -136,10 +130,10 @@ typedef struct sync_properties sync_prop_resp;
 
 // 0..7  (Ia..Un) for stream 1
 // 8..15 (Ia..Un) for stream 2
-struct __attribute__((__packed__)) calc_req {
-	timeval64 time_stamp;
+typedef struct __attribute__((__packed__)) calc_req {
+	timeval time_stamp;
 	uint8_t stream[2];
-};
+} calc_req;
 
 struct __attribute__((__packed__)) calc_comparator {
 	double rms;
@@ -150,9 +144,18 @@ struct __attribute__((__packed__)) calc_comparator {
 	double thd;
 };
 
+typedef struct __attribute__((__packed__)) calc_comparator {
+	double rms;
+	double dc;
+	double f_1h;
+	double rms_1h;
+	double phi;
+	double thd;
+} calc_comparator;
+
 struct  __attribute__((__packed__)) calc_comparator_resp {
 	calc_req resp;
-	calc_comparator val[];
+	calc_comparator data[];
 }; 
 
 struct __attribute__((__packed__)) calc_harmonic {
@@ -166,28 +169,22 @@ struct __attribute__((__packed__)) calc_harmonics {
 	struct calc_harmonic h[];
 };
 
-struct __attribute__((__packed__)) calc_general {
-	double rms;
-	double dc;
-	double f_1h;
-	double rms_1h;
-	double phi;
-	double thd;
-};
-
 typedef struct __attribute__((__packed__)) calc_data_req {
-	uint8_t idx1;
-	uint8_t idx2;
+	calc_req req;
 	uint32_t scale;
 	uint32_t begin;
 	uint32_t length;
 	uint32_t counts_limit;
 } calc_data_req;
 
-struct __attribute__((__packed__)) calc_data {
-	uint32_t size1;
-	uint32_t size2;
+typedef struct __attribute__((__packed__)) calc_data {
+	uint32_t counts;
 	float data[];
+} calc_data;
+
+typedef struct __attribute__((__packed__)) calc_data_resp {
+	calc_req resp;
+	calc_data data[];
 };
 
 typedef struct __attribute__((__packed__)) versions_resp {
