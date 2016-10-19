@@ -6,7 +6,7 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "calc.h"
-#include "compute.h"
+#include "calc_math.h"
 
 #include "debug.h"
 #ifdef DEBUG
@@ -17,11 +17,10 @@
 unsigned int EQ_TRAILS = 0; // На сколько уменьшать длину вектора данных чтобы учесть работу эквалайзера
 
 double Kf = 1.0;
-static int harmonics_count = 6;
+int harmonics_count = 6;
 //static int subharmonics_count = 6;
 
 calc_stream *stream[2];
-static double scale_factor(int idx);
 
 int calc_init()
 {
@@ -81,13 +80,13 @@ void prepare_phases(int stm_idx, uint8_t phases_mask)
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {
 			phase *ph = &stm->phases[p];
-			for (int i = 0; i < v_size; i++) {
+			for (int i = 0; i < stm->v_size; i++) {
 				ph->data_wh[i] = ph->values[i] * stm->hanning_full[i];
 				ph->data_wh_wz[i*2] = ph->data_wh[i];
 			}
 			general_transform(ph->data_wh_wz, ph->data_complex_out, stm->counts, 1);
 			for(int i = 0, j = 0; i < stm->counts; i++, j +=2)
-				p->ampl_spectre[i] = sqrt(pow(ph->data_complex_out[j], 2) + pow(ph->data_complex_out[j + 1], 2));
+				ph->ampl_spectre[i] = sqrt(pow(ph->data_complex_out[j], 2) + pow(ph->data_complex_out[j + 1], 2));
 		}
 	}	
 }

@@ -6,7 +6,6 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "calc.h"
-#include "compute.h"
 
 #include "debug.h"
 #ifdef DEBUG

@@ -592,22 +592,22 @@ int sv_get_ready(struct timeval *ts, sv_data **stream1, int *stream1_size, sv_da
 		if (s1_buf->rate) {
 			*ts = s1_buf->ts;
 			*stream1_size = s1_buf->rate;
-			stream1 = s1_buf->data;
+			*stream1 = &s1_buf->data;
 		}
 		else {
 			*stream1_size = 0;
-			*stream1 = 0;
+			*stream1 = NULL;
 		}
 	}
 	if (stream2) {
 		if (s2_buf->rate) {
 			*ts = s2_buf->ts;
 			*stream2_size = s2_buf->rate;
-			stream2 = s2->data;
+			*stream2 = s2_buf->data;
 		}
 		else {
 			*stream2_size = 0;
-			*stream2 = 0;
+			*stream2 = NULL;
 		}
 	}
 

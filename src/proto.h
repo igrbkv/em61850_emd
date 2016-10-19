@@ -32,7 +32,7 @@ enum REQ_CODES {
 	GET_CALC_COMPARATOR_REQ,
 	GET_CALC_DATA_REQ,
 	GET_CALC_HARMONICS_REQ,
-	GET_CALC_POWER_REQ,
+	GET_CALC_UI_REQ,
 };
 
 enum ERR_CODES {
@@ -48,9 +48,6 @@ typedef struct __attribute__((__packed__)) pdu {
 
 struct __attribute__((__packed__)) err_resp {
 	uint8_t err_code;
-};
-
-struct req {
 };
 
 struct __attribute__((__packed__)) set_time_req {
@@ -90,7 +87,6 @@ struct __attribute__((__packed__)) adc_properties {
 	char sv_id[SV_ID_MAX_LEN];
 };
 
-
 typedef struct adc_properties adc_prop_resp;
 
 struct __attribute__((__packed__)) streams_properties {
@@ -124,25 +120,10 @@ struct __attribute__((__packed__)) sync_properties {
 
 typedef struct sync_properties sync_prop_resp;
 
-#define STREAM2_START_IDX 8
-#define I_START_IDX 0
-#define PHASES_NUM 4
-
-// 0..7  (Ia..Un) for stream 1
-// 8..15 (Ia..Un) for stream 2
 typedef struct __attribute__((__packed__)) calc_req {
-	timeval time_stamp;
+	struct timeval time_stamp;
 	uint8_t stream[2];
 } calc_req;
-
-struct __attribute__((__packed__)) calc_comparator {
-	double rms;
-	double dc;
-	double f_1h;
-	double rms_1h;
-	double phi;
-	double thd;
-};
 
 typedef struct __attribute__((__packed__)) calc_comparator {
 	double rms;
@@ -153,10 +134,10 @@ typedef struct __attribute__((__packed__)) calc_comparator {
 	double thd;
 } calc_comparator;
 
-struct  __attribute__((__packed__)) calc_comparator_resp {
+typedef struct  __attribute__((__packed__)) calc_comparator_resp {
 	calc_req resp;
 	calc_comparator data[];
-}; 
+} calc_comparator_resp; 
 
 struct __attribute__((__packed__)) calc_harmonic {
 	double f;
@@ -185,7 +166,7 @@ typedef struct __attribute__((__packed__)) calc_data {
 typedef struct __attribute__((__packed__)) calc_data_resp {
 	calc_req resp;
 	calc_data data[];
-};
+} calc_data_resp;
 
 typedef struct __attribute__((__packed__)) versions_resp {
 	char emd[VERSION_MAX_LEN];
@@ -198,16 +179,5 @@ typedef struct __attribute__((__packed__)) network {
 	char mask[INET_ADDRSTRLEN];
 	char gateway[INET_ADDRSTRLEN];
 } network;
-
-typedef struct __attribute__((__packed__)) calc_power {
-	double u_rms;
-	double i_rms;
-	double u_phi;
-	double i_phi;
-	double phi;
-	double p;
-	double q;
-	double s;
-} calc_power;
 
 #endif

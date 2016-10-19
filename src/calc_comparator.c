@@ -6,7 +6,7 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "calc.h"
-#include "compute.h"
+#include "calc_math.h"
 
 #include "debug.h"
 #ifdef DEBUG
@@ -45,21 +45,21 @@ int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
 
 	if (svd_size[0]) {
 		set_stream_values(0, resp.stream[0], svd[0], svd_size[0]);
-		prepare_stream(0, resp.stream[0]);
-		calc_comparator_stream(0, resp.stream[0], comparator);
+		prepare_phases(0, resp.stream[0]);
+		calc_comparator_stream(0, resp.stream[0], cmpr);
 	}
 
 	if (svd_size[1]) {
 		set_stream_values(0, resp.stream[0], svd[0], svd_size[0]);
-		prepare_stream(0, resp.stream[0]);
-		calc_comparator_stream(0, resp.stream[0], comparator);
+		prepare_phases(0, resp.stream[0]);
+		calc_comparator_stream(0, resp.stream[0], cmpr);
 	}
 
 	return 0;
 }
 
 
-void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator *cmpr)
+void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator *cmpr)
 {
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
@@ -74,7 +74,7 @@ void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator *cm
 
 			for (int i = 0; i < stm->v_size; i++) {
 				double val = ph->values[i];
-				double hf = stm->hanning_ful[i];
+				double hf = stm->hanning_full[i];
 
 				rect_mean_h += fabs(hf * val);
 				rms_wh += hf * val * val;		
@@ -123,7 +123,7 @@ void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator *cm
 			cmpr->phi = abs_phi;
 			cmpr->thd = thd;
 			
-			cmp++;
+			cmpr++;
 		}
 	}
 }

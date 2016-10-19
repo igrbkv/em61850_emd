@@ -1,3 +1,5 @@
+#include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 #include "calc.h"
@@ -8,7 +10,9 @@ struct calc_fft {
 	double *vvv;
 };
 
-static calc_fft fft;
+static struct calc_fft fft;
+
+static void dfour1(double data[], unsigned int nn2, int isign);
 
 void alloc_fft(int samples_num)
 {
