@@ -125,6 +125,11 @@ typedef struct __attribute__((__packed__)) calc_req {
 	uint8_t stream[2];
 } calc_req;
 
+typedef struct  __attribute__((__packed__)) calc_resp {
+	calc_req resp;
+	uint8_t data[];
+} calc_resp; 
+
 typedef struct __attribute__((__packed__)) calc_comparator {
 	double rms;
 	double dc;
@@ -134,10 +139,12 @@ typedef struct __attribute__((__packed__)) calc_comparator {
 	double thd;
 } calc_comparator;
 
+/*
 typedef struct  __attribute__((__packed__)) calc_comparator_resp {
 	calc_req resp;
 	calc_comparator data[];
 } calc_comparator_resp; 
+*/
 
 struct __attribute__((__packed__)) calc_harmonic {
 	double f;
@@ -163,10 +170,12 @@ typedef struct __attribute__((__packed__)) calc_data {
 	float data[];
 } calc_data;
 
+/*
 typedef struct __attribute__((__packed__)) calc_data_resp {
 	calc_req resp;
 	calc_data data[];
 } calc_data_resp;
+*/
 
 typedef struct __attribute__((__packed__)) versions_resp {
 	char emd[VERSION_MAX_LEN];

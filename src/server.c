@@ -215,14 +215,14 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, ret, out, out_len);
 			else {
-				len = sizeof(pdu_t) + sizeof(struct calc_data_resp) + cd_size;
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + cd_size;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
-				struct calc_data_resp *cdr = (struct calc_data_resp *)resp->data;
-				cdr->resp = req->req;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = req->req;
 		 
-				memcpy(cdr->data, cd, cd_size);
+				memcpy(cr->data, cd, cd_size);
 				free(cd);
 
 				*out = (void *)resp;
@@ -244,13 +244,13 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				make_err_resp(hdr->msg_code, ret, out, out_len);
 			else {
 				int phs = phases(req);
-				len = sizeof(pdu_t) + sizeof(struct calc_comparator_resp) + sizeof(calc_comparator)*phs;
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
-				struct calc_comparator_resp *ccr = (struct calc_comparator_resp *)resp->data;
-				ccr->resp = *req;
-				memcpy(ccr->data, cc, sizeof(calc_comparator)*phs);
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = *req;
+				memcpy(cr->data, cc, sizeof(calc_comparator)*phs);
 
 				*out = (void *)resp;
 				*out_len = len;
