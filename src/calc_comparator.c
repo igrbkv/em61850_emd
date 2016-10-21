@@ -24,35 +24,37 @@ static void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_compara
 int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
 {
 	sv_data *svd[2];
-	int svd_size[2] = {0};
-	calc_req resp = *req;
+	int svd_size[2] = {0, 0};
 
-	sv_get_ready(&resp.time_stamp, resp.stream[0]? &svd[0]: NULL, resp.stream[0]? &svd_size[0]: NULL, resp.stream[1]? &svd[1]: NULL, resp.stream[1]? &svd_size[1]: NULL);
+	if (req->stream[0] == 0 && req->stream[1] == 0)
+		return 0;
 
-	if (memcmp(&last_req, &resp, sizeof(calc_req)) == 0)
+	sv_get_ready(&req->time_stamp, req->stream[0]? &svd[0]: NULL, req->stream[0]? &svd_size[0]: NULL, req->stream[1]? &svd[1]: NULL, req->stream[1]? &svd_size[1]: NULL);
+
+	if (memcmp(&last_req, req, sizeof(calc_req)) == 0)
 		return -ERR_RETRY;
 
-	last_req = resp;
+	last_req = *req;
 
-	if (svd_size[0])
-		resp.stream[0] = 0;
-	if (svd_size[1])
-		resp.stream[1] = 0;
+	if (svd_size[0] == 0)
+		req->stream[0] = 0;
+	if (svd_size[1] == 0)
+		req->stream[1] = 0;
 
 	// no data
 	if (svd_size[0] == 0 && svd_size[1] == 0)
 		return 0;
 
 	if (svd_size[0]) {
-		set_stream_values(0, resp.stream[0], svd[0], svd_size[0]);
-		prepare_phases(0, resp.stream[0]);
-		calc_comparator_stream(0, resp.stream[0], cmpr);
+		set_stream_values(0, req->stream[0], svd[0], svd_size[0]);
+		prepare_phases(0, req->stream[0]);
+		calc_comparator_stream(0, req->stream[0], cmpr);
 	}
 
 	if (svd_size[1]) {
-		set_stream_values(0, resp.stream[0], svd[0], svd_size[0]);
-		prepare_phases(0, resp.stream[0]);
-		calc_comparator_stream(0, resp.stream[0], cmpr);
+		set_stream_values(0, req->stream[0], svd[0], svd_size[0]);
+		prepare_phases(0, req->stream[0]);
+		calc_comparator_stream(0, req->stream[0], cmpr);
 	}
 
 	return 0;

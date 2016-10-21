@@ -18,6 +18,7 @@
 #define DEFAULT_BACKLOG 128
 
 char emd_ip4_addr[INET_ADDRSTRLEN];
+char emd_interface_name[32];
 
 typedef struct {
 	uv_write_t req;
@@ -189,6 +190,7 @@ void init_emd_ip4_addr()
 				interface.name[0] == 'e') {
 				uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
 				base_iface_inited = 1;
+				strcpy(emd_interface_name, interface.name);
 				break;
 			}
 		}

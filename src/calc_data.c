@@ -13,10 +13,13 @@ static void add_calc_data(void **cd, int *cd_size, uint8_t phases_mask, sv_data 
 int make_calc_data(calc_data_req *req, calc_data **data, int *data_size)
 {
 	sv_data *svd[2];
-	int svd_size[2] = {0};
+	int svd_size[2] = {0, 0};
 	calc_req *resp = &req->req;
 	*data = NULL;
 	data_size = 0;
+
+	if (resp->stream[0] == 0 && resp->stream[1] == 0)
+		return 0;
 
 	sv_get_ready(&resp->time_stamp, resp->stream[0]? &svd[0]: NULL, resp->stream[0]? &svd_size[0]: NULL, resp->stream[1]? &svd[1]: NULL, resp->stream[1]? &svd_size[1]: NULL);
 
@@ -25,9 +28,9 @@ int make_calc_data(calc_data_req *req, calc_data **data, int *data_size)
 
 	last_req = *req;
 
-	if (svd_size[0])
+	if (svd_size[0] == 0)
 		resp->stream[0] = 0;
-	if (svd_size[1])
+	if (svd_size[1] == 0)
 		resp->stream[1] = 0;
 
 	// no data

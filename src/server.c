@@ -213,7 +213,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			int cd_size;
 			int ret = make_calc_data(req, &cd, &cd_size);
 			if (ret < 0)
-				make_err_resp(hdr->msg_code, ret, out, out_len);
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + cd_size;
 				pdu_t *resp = malloc(len);
@@ -241,7 +241,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			struct calc_comparator cc[PHASES_IN_STREAM*2];
 			int ret = make_comparator_calc(req, cc);
 			if (ret < 0)
-				make_err_resp(hdr->msg_code, ret, out, out_len);
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
 				int phs = phases(req);
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
@@ -314,10 +314,10 @@ void set_network(const network *net)
 		emd_log(LOG_ERR, "open(%s) failed!: %s", fn, strerror(errno));
 		return;
 	}
-	fprintf(fp, "config_enp1s0=\"null\"\n"
-		"bridge_br0=\"enp1s0\"\n"
+	fprintf(fp, "config_%s=\"null\"\n"
+		"bridge_br0=\"%s\"\n"
 		"config_br0=\"%s netmask %s\"",
-		net->addr, net->mask);
+		emd_interface_name, emd_interface_name, net->addr, net->mask);
 	fflush(fp);
 	fclose(fp);
 
