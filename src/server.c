@@ -23,7 +23,8 @@ int correct_time = 1; // Время усанавливается по планш
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void set_network(const network *net);
-static int phases(calc_req *req);
+static int phases_count(uint8_t stream);
+static int diffs[PHASES_IN_STREAM] = {0, 0, 1, 3, 6};
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -37,18 +38,18 @@ void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 	*len = sz;
 }
 
-int phases(calc_req *req)
+int phases_count(uint8_t stream)
 {
 	int ret = 0;
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < PHASES_IN_STREAM; i++) {
 		uint8_t bit = 0x1 << i;
-		if (req->stream[0] & bit)
-			ret++;
-		if (req->stream[1] & bit)
+		if (stream & bit)
 			ret++;
 	}
 	return ret;
 }
+
+
 
 // confirmation = empty msg
 void make_confirmation(uint8_t code, void **msg, int *len)
@@ -243,7 +244,35 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
-				int phs = phases(req);
+				int phs = phases_count(req->stream[0]) + phases_count(req->stream[1]);
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = *req;
+				memcpy(cr->data, cc, sizeof(calc_comparator)*phs);
+
+				*out = (void *)resp;
+				*out_len = len;
+			}
+			break;
+		} 
+
+		case GET_CALC_UI_REQ: {
+			if (data_len != sizeof(struct calc_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
+				return -1;
+			}
+			struct calc_req *req = (struct calc_req *)hdr->data; 
+
+			struct calc_ui cui[PHASES_IN_STREAM*2];
+			struct calc_ui_diff cui_diff[diffs[PHASES_IN_STREAM]*2];
+			int ret = make_calc_ui(req, cui, cui_diff);
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
+			else {
+				int phs = phases_count(req->stream[0]) + phases_count(req->stream[1]);
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;

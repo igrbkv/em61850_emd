@@ -15,6 +15,7 @@ emd_SOURCES = ../config.h \
 	calc.h calc.c \
 	calc_comparator.c \
 	calc_data.c \
+	calc_ui.c \
 	calc_math.h calc_math.c \
 	settings.h settings.c \
 	proto.h

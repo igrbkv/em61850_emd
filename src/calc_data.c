@@ -16,7 +16,7 @@ int make_calc_data(calc_data_req *req, calc_data **data, int *data_size)
 	int svd_size[2] = {0, 0};
 	calc_req *resp = &req->req;
 	*data = NULL;
-	data_size = 0;
+	*data_size = 0;
 
 	if (resp->stream[0] == 0 && resp->stream[1] == 0)
 		return 0;

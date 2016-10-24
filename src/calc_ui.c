@@ -6,22 +6,19 @@
 #include "sv_read.h"
 #include "settings.h"
 #include "calc.h"
-#include "calc_math.h"
 
 #include "debug.h"
-#ifdef DEBUG
-#include <stdio.h>
-#endif
 
 static calc_req last_req;
 
-static void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator **cmpr);
+static void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui);
+static void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui_diff);
 
 // @param req: req => resp
 // @param cmpr: calc_comparator's ptr
 // @return 0  - Ok
 //         <0 - error
-int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
+int make_calc_ui(calc_req *req, calc_ui *cui, calc_ui_diff *cui_diff)
 {
 	sv_data *svd[2];
 	int svd_size[2] = {0, 0};
@@ -45,45 +42,48 @@ int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
 	if (svd_size[0] == 0 && svd_size[1] == 0)
 		return 0;
 
-	calc_comparator **_cmpr = &cmpr;
+	calc_ui **_cui = &cui;
+
 	if (svd_size[0]) {
 		set_stream_values(0, req->stream[0], svd[0], svd_size[0]);
 		prepare_phases(0, req->stream[0]);
-		calc_comparator_stream(0, req->stream[0], _cmpr);
+		calc_ui_stream(0, req->stream[0], _cui);
 	}
 
 	if (svd_size[1]) {
 		set_stream_values(1, req->stream[1], svd[1], svd_size[1]);
 		prepare_phases(1, req->stream[1]);
-		calc_comparator_stream(1, req->stream[1], _cmpr);
+		calc_ui_stream(1, req->stream[1], _cui);
 	}
+
+	calc_ui **_cui_diff = &cui_diff;
+	// FIXME потоки могут быть разной частоты дискретизации
+	// поэтому считаются отдельно
+	if (svd_size[0])
+		calc_ui_diff_stream(0, req->stream[0], _cui_diff);
+	if (svd_size[1])
+		calc_ui_diff_stream(1, req->stream[1], _cui_diff);
 
 	return 0;
 }
 
-
-void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator **cmpr)
+void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui)
 {
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {
 			phase *ph = &stm->phases[p];
 
-			double rect_mean_h = 0.0,
-				rms_wh = 0.0,
+			double rms_wh = 0.0,
 				mean_wh = 0.0,
-				ampl = ph->values[0],
 				t_samp = 1./stm->counts;
 
 			for (int i = 0; i < stm->v_size; i++) {
 				double val = ph->values[i];
 				double hf = stm->hanning_full[i];
 
-				rect_mean_h += fabs(hf * val);
 				rms_wh += hf * val * val;		
 				mean_wh += hf * val;
-				if (val > ampl)
-					ampl = val;
 			}
 			rms_wh = sqrt(rms_wh);
 
@@ -92,41 +92,40 @@ void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator **
 
 			int i_max = rev_win_han_scan(ph->ampl_spectre, 3, stm->counts / 2 - 1, ar, stm->counts, t_samp);
 
-			double abs_phi = calc_abs_phi(ph->data_complex_out, t_samp, i_max, stm->counts);
-
-			ar[ 0 ] *= Kf;
+			(*cui)->rms = rms_wh;
+			(*cui)->rms_1h = ar[2];
+			(*cui)->mid = mean_wh;
 			
-			const int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
-			const int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
+			(*cui)++;
+		}
+	}
+}
 
-			double thd = 0.;
+void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui_diff)
+{
+	calc_stream *stm = stream[stm_idx];
+	for (int p = 0; p < PHASES_IN_STREAM; p++) {
+		if (phases_mask & (0x1<<p)) {
+			phase *ph = &stm->phases[p];
 
-			for	(int i = 2; i < max_harm; i++) {
-				int idx = stm->counts * t_samp * ar[0] * i + 0.5;
-				
-				double ar_cur[3];		
-				i_max = rev_win_han_scan(ph->ampl_spectre, idx - 1, idx + 1, ar_cur, stm->counts, t_samp);
-#if 0
-				h[i-2].f = ar_cur[0];
-				h[i-2].k = ar_cur[1];
-				h[i-2].ampl = ar_cur[2];
-#endif
-				thd += pow(ar_cur[2], 2);
+			for (int pp = p + 1; pp < PHASES_IN_STREAM; pp++) {
+				if (phases_mask & (0x1<<pp)) {
+					phase *pph = &stm->phases[pp];
+
+					double rms_wh = 0.0;
+
+					for (int i = 0; i < stm->v_size; i++) {
+						double val = ph->values[i] - pph->values[i];
+						double hf = stm->hanning_full[i];
+						rms_wh += hf * val * val;		
+					}
+					rms_wh = sqrt(rms_wh);
+
+					(*cui_diff)->rms = rms_wh;
+					
+					(*cui_diff)++;
+				}
 			}
-			thd = sqrt(thd) / ar[2];
-
-#if 0
-			harmonics_num = max_harm < 2? 0: max_harm - 2;
-#endif
-
-			(*cmpr)->rms = rms_wh;
-			(*cmpr)->dc = mean_wh;
-			(*cmpr)->f_1h = ar[0];
-			(*cmpr)->rms_1h = ar[2];
-			(*cmpr)->phi = abs_phi;
-			(*cmpr)->thd = thd;
-			
-			(*cmpr)++;
 		}
 	}
 }
