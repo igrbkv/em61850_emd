@@ -9,6 +9,9 @@
 
 #include "debug.h"
 
+#define U_MASK 0xf0
+#define I_MASK 0x0f
+
 static calc_req last_req;
 
 static void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui);
@@ -103,6 +106,8 @@ void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui)
 
 void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui_diff)
 {
+	// только напряжение
+	phases_mask &= U_MASK;
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {

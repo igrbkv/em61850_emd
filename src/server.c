@@ -273,14 +273,16 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
 				int phs = phases_count(req->stream[0]) + phases_count(req->stream[1]);
-				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
+				int ds = diffs[phases_count(req->stream[0])] + diffs[phases_count(req->stream[1])]; 
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_ui)*phs + sizeof(calc_ui_diff)*ds;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
 				struct calc_resp *cr = (struct calc_resp *)resp->data;
 				cr->resp = *req;
-				memcpy(cr->data, cc, sizeof(calc_comparator)*phs);
+				memcpy(cr->data, cui, sizeof(calc_ui)*phs);
 
+				memcpy(&cr->data[sizeof(calc_ui)*phs], cui_diff, sizeof(calc_ui_diff)*ds);
 				*out = (void *)resp;
 				*out_len = len;
 			}
