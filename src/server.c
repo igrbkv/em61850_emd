@@ -260,11 +260,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 		} 
 
 		case GET_CALC_UI_REQ: {
-			if (data_len != sizeof(struct calc_req)) {
-				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
+			if (data_len != sizeof(struct calc_multimeter_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_UI_REQ error data size!");
 				return -1;
 			}
-			struct calc_req *req = (struct calc_req *)hdr->data; 
+			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
 
 			struct calc_ui cui[PHASES_IN_STREAM*2];
 			struct calc_ui_diff cui_diff[diffs[PHASES_IN_STREAM]*2];
@@ -272,17 +272,43 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
-				int phs = phases_count(req->stream[0]) + phases_count(req->stream[1]);
-				int ds = diffs[phases_count(req->stream[0])] + diffs[phases_count(req->stream[1])]; 
+				int phs = phases_count(req->req.stream[0]) + phases_count(req->req.stream[1]);
+				int ds = diffs[phases_count(req->req.stream[0])] + diffs[phases_count(req->req.stream[1])]; 
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_ui)*phs + sizeof(calc_ui_diff)*ds;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
 				struct calc_resp *cr = (struct calc_resp *)resp->data;
-				cr->resp = *req;
+				cr->resp = req->req;
 				memcpy(cr->data, cui, sizeof(calc_ui)*phs);
 
 				memcpy(&cr->data[sizeof(calc_ui)*phs], cui_diff, sizeof(calc_ui_diff)*ds);
+				*out = (void *)resp;
+				*out_len = len;
+			}
+			break;
+		} 
+
+		case GET_CALC_P_REQ: {
+			if (data_len != sizeof(struct calc_multimeter_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_P_REQ error data size!");
+				return -1;
+			}
+			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
+
+			struct calc_p cp[PHASES_IN_STREAM/2*2];
+			int ret = make_calc_p(req, cp);
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_p)*ret;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = req->req;
+				memcpy(cr->data, cp, sizeof(calc_p)*ret);
+
 				*out = (void *)resp;
 				*out_len = len;
 			}

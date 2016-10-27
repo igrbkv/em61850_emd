@@ -33,6 +33,7 @@ enum REQ_CODES {
 	GET_CALC_DATA_REQ,
 	GET_CALC_HARMONICS_REQ,
 	GET_CALC_UI_REQ,
+	GET_CALC_P_REQ,
 };
 
 enum ERR_CODES {
@@ -177,6 +178,11 @@ typedef struct __attribute__((__packed__)) calc_data {
 	float data[];
 } calc_data;
 
+typedef struct __attribute__((__packed__)) calc_multimeter_req {
+	calc_req req;
+	uint8_t reference[2];
+} calc_multimeter_req;
+
 typedef struct __attribute__((__packed__)) calc_ui {
 	double rms;
 	double rms_1h;
@@ -186,4 +192,13 @@ typedef struct __attribute__((__packed__)) calc_ui {
 typedef struct __attribute__((__packed__)) calc_ui_diff {
 	double diff;
 }calc_ui_diff;
+
+typedef struct __attribute__((__packed__)) calc_p {
+	double p;
+	double rms_u;
+	double rms_i;
+	double p_1h;
+	double cos_phi;
+} calc_p;
+
 #endif
