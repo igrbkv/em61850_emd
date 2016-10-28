@@ -195,10 +195,15 @@ typedef struct __attribute__((__packed__)) calc_ui_diff {
 
 typedef struct __attribute__((__packed__)) calc_p {
 	double p;
+	double q;
+	double s;
 	double rms_u;
 	double rms_i;
 	double p_1h;
+	double q_1h;
+	double s_1h;
 	double cos_phi;
+	double sin_phi;
 } calc_p;
 
 #endif
