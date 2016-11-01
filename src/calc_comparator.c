@@ -15,16 +15,17 @@
 
 static calc_req last_req;
 
-static void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator **cmpr);
+static void calc_comparator_stream(int stm_idx, uint8_t phase_mask, calc_comparator *cmpr, int *cmpr_sz);
 
 // @param req: req => resp
 // @param cmpr: calc_comparator's ptr
 // @return 0  - Ok
 //         <0 - error
-int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
+int make_comparator_calc(calc_req *req, calc_comparator *cmpr, int *cmpr_sz)
 {
 	sv_data *svd[2];
 	int svd_size[2] = {0, 0};
+	*cmpr_sz = 0;
 
 	if (req->stream[0] == 0 && req->stream[1] == 0)
 		return 0;
@@ -45,24 +46,18 @@ int make_comparator_calc(calc_req *req, calc_comparator *cmpr)
 	if (svd_size[0] == 0 && svd_size[1] == 0)
 		return 0;
 
-	calc_comparator **_cmpr = &cmpr;
-	if (svd_size[0]) {
-		set_stream_values(0, req->stream[0], svd[0], svd_size[0]);
-		prepare_phases(0, req->stream[0]);
-		calc_comparator_stream(0, req->stream[0], _cmpr);
-	}
-
-	if (svd_size[1]) {
-		set_stream_values(1, req->stream[1], svd[1], svd_size[1]);
-		prepare_phases(1, req->stream[1]);
-		calc_comparator_stream(1, req->stream[1], _cmpr);
-	}
+	for (int i = 0; i < 2; i++)
+		if (svd_size[i]) {
+			set_stream_values(i, req->stream[i], svd[i], svd_size[i]);
+			prepare_phases(i, req->stream[i]);
+			calc_comparator_stream(i, req->stream[i], cmpr, cmpr_sz);
+		}
 
 	return 0;
 }
 
 
-void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator **cmpr)
+void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator *cmpr, int *cmpr_sz)
 {
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
@@ -119,14 +114,14 @@ void calc_comparator_stream(int stm_idx, uint8_t phases_mask, calc_comparator **
 			harmonics_num = max_harm < 2? 0: max_harm - 2;
 #endif
 
-			(*cmpr)->rms = rms_wh;
-			(*cmpr)->dc = mean_wh;
-			(*cmpr)->f_1h = ar[0];
-			(*cmpr)->rms_1h = ar[2];
-			(*cmpr)->phi = abs_phi;
-			(*cmpr)->thd = thd;
+			cmpr[*cmpr_sz].rms = rms_wh;
+			cmpr[*cmpr_sz].dc = mean_wh;
+			cmpr[*cmpr_sz].f_1h = ar[0];
+			cmpr[*cmpr_sz].rms_1h = ar[2];
+			cmpr[*cmpr_sz].phi = abs_phi;
+			cmpr[*cmpr_sz].thd = thd;
 			
-			(*cmpr)++;
+			(*cmpr_sz)++;
 		}
 	}
 }

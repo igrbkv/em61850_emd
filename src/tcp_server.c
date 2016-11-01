@@ -31,7 +31,7 @@ static void tcp_server_read(uv_stream_t *client, ssize_t nread, const uv_buf_t *
 static void on_new_connection(uv_stream_t *server, int status);
 static void on_write(uv_write_t* req, int status);
 static void on_shutdown(uv_shutdown_t* req, int status);
-static void init_emd_ip4_addr();
+static int init_emd_ip4_addr();
 
 void on_close(uv_handle_t* handle)
 {
@@ -166,7 +166,7 @@ void on_new_connection(uv_stream_t *server, int status)
 	}
 }
 
-void init_emd_ip4_addr()
+int init_emd_ip4_addr()
 {
 	uv_interface_address_t *info;
 	int count, i;
@@ -177,7 +177,7 @@ void init_emd_ip4_addr()
 	// Сервис emd сделать зависимым от mynet(need mynet)
 	// либо
 	// Поправить сервис net.lo
-#define MAX_ATTEMPTS 10
+#define MAX_ATTEMPTS 20
 	int base_iface_inited = 0;
 	for (int j = 0; j < MAX_ATTEMPTS; j++) {
 		uv_interface_addresses(&info, &count);
@@ -186,9 +186,9 @@ void init_emd_ip4_addr()
 			uv_interface_address_t interface = info[i];
 
 			if (!interface.is_internal && 
-				interface.address.address4.sin_family == AF_INET &&
 				interface.name[0] == 'e') {
-				uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
+				if (interface.address.address4.sin_family == AF_INET)
+					uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
 				base_iface_inited = 1;
 				strcpy(emd_interface_name, interface.name);
 				break;
@@ -199,6 +199,11 @@ void init_emd_ip4_addr()
 		if (base_iface_inited)
 			break;
 		sleep(1);
+	}
+	emd_log(LOG_DEBUG, "Ethernet interface: %s", emd_interface_name);
+	if (base_iface_inited == 0) {
+		emd_log(LOG_ERR, "Ethernet interface not present!");
+		return -1;
 	}
 
 	// ipv4
@@ -217,6 +222,8 @@ void init_emd_ip4_addr()
 	}
 
 	uv_free_interface_addresses(info, count);
+
+	return 0;
 }
 
 void inc_ip4_addr(char *dst, const char *src, int step)
@@ -235,7 +242,8 @@ int tcp_server_init()
 	uv_tcp_t *server;
 	struct sockaddr_in addr;
 
-	init_emd_ip4_addr();
+	if (init_emd_ip4_addr() == -1)
+		return -1;
 		
 	server = (uv_tcp_t*) malloc(sizeof(*server));
 	

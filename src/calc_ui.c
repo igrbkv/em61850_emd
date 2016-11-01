@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "calc.h"
 #include "calc_math.h"
+#include "log.h"
 
 #include "debug.h"
 
@@ -15,17 +16,19 @@
 
 static calc_req last_req;
 
-static void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui);
-static void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff **cui_diff);
+static void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui *cui, int *cui_sz);
+static void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff *cui_diff, int *cui_diff_sz);
 
 // @param req: req => resp
 // @param cmpr: calc_comparator's ptr
 // @return 0  - Ok
 //         <0 - error
-int make_calc_ui(calc_multimeter_req *cmr, calc_ui *cui, calc_ui_diff *cui_diff)
+int make_calc_ui(calc_multimeter_req *cmr, calc_ui *cui, int *cui_sz, calc_ui_diff *cui_diff, int *cui_diff_sz)
 {
 	sv_data *svd[2];
 	int svd_size[2] = {0, 0};
+	*cui_sz = 0;
+	*cui_diff_sz = 0;
 
 	// Опорный сигнал не используется
 	calc_req * req = &cmr->req;
@@ -49,33 +52,28 @@ int make_calc_ui(calc_multimeter_req *cmr, calc_ui *cui, calc_ui_diff *cui_diff)
 	if (svd_size[0] == 0 && svd_size[1] == 0)
 		return 0;
 
-	calc_ui **_cui = &cui;
 
-	if (svd_size[0]) {
-		set_stream_values(0, req->stream[0], svd[0], svd_size[0]);
-		prepare_phases(0, req->stream[0]);
-		calc_ui_stream(0, req->stream[0], _cui);
-	}
+	for (int i = 0; i < 2; i++)
+		if (svd_size[i]) {
+			set_stream_values(i, req->stream[i], svd[i], svd_size[i]);
+			prepare_phases(i, req->stream[i]);
+			calc_ui_stream(i, req->stream[i], cui, cui_sz);
+		}
 
-	if (svd_size[1]) {
-		set_stream_values(1, req->stream[1], svd[1], svd_size[1]);
-		prepare_phases(1, req->stream[1]);
-		calc_ui_stream(1, req->stream[1], _cui);
-	}
 
-	calc_ui_diff **_cui_diff = &cui_diff;
 	// FIXME потоки могут быть разной частоты дискретизации
 	// поэтому считаются отдельно
-	if (svd_size[0])
-		calc_ui_diff_stream(0, req->stream[0], _cui_diff);
-	if (svd_size[1])
-		calc_ui_diff_stream(1, req->stream[1], _cui_diff);
+	
+	for (int i = 0; i < 2; i++)
+		if (svd_size[i])
+			calc_ui_diff_stream(i, req->stream[i], cui_diff, cui_diff_sz);
 
 	return 0;
 }
 
-void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui)
+void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui *cui, int *cui_sz)
 {
+	int count = 0;
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {
@@ -99,18 +97,19 @@ void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui **cui)
 
 			rev_win_han_scan(ph->ampl_spectre, 3, stm->counts / 2 - 1, ar, stm->counts, t_samp);
 
-			(*cui)->rms = rms_wh;
-			(*cui)->rms_1h = ar[2];
-			(*cui)->mid = mean_wh;
+			cui[*cui_sz].rms = rms_wh;
+			cui[*cui_sz].rms_1h = ar[2];
+			cui[*cui_sz].mid = mean_wh;
 			
-			(*cui)++;
+			(*cui_sz)++;
 		}
 	}
 }
 
-void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff **cui_diff)
+void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff *cui_diff, int *cui_diff_sz)
 {
 	// только напряжение
+	int count = 0;
 	phases_mask &= U_MASK;
 	calc_stream *stm = stream[stm_idx];
 	for (int p = PHASES_IN_STREAM/2; p < PHASES_IN_STREAM; p++) {
@@ -130,9 +129,9 @@ void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff **cui_di
 					}
 					rms_wh = sqrt(rms_wh);
 
-					(*cui_diff)->diff = rms_wh;
+					cui_diff[*cui_diff_sz].diff = rms_wh;
 					
-					(*cui_diff)++;
+					(*cui_diff_sz)++;
 				}
 			}
 		}

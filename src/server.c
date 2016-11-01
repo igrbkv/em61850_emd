@@ -24,7 +24,6 @@ static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void set_network(const network *net);
 static int phases_count(uint8_t stream);
-static int diffs[PHASES_IN_STREAM] = {0, 0, 1, 3, 6};
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -240,11 +239,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			struct calc_req *req = (struct calc_req *)hdr->data; 
 
 			struct calc_comparator cc[PHASES_IN_STREAM*2];
-			int ret = make_comparator_calc(req, cc);
+			int phs;
+			int ret = make_comparator_calc(req, cc, &phs);
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
-				int phs = phases_count(req->stream[0]) + phases_count(req->stream[1]);
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_comparator)*phs;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
@@ -267,13 +266,13 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
 
 			struct calc_ui cui[PHASES_IN_STREAM*2];
-			struct calc_ui_diff cui_diff[diffs[PHASES_IN_STREAM]*2];
-			int ret = make_calc_ui(req, cui, cui_diff);
+			struct calc_ui_diff cui_diff[PHASES_IN_STREAM*2];
+			int phs, ds;
+			int ret = make_calc_ui(req, cui, &phs, cui_diff, &ds);
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
-				int phs = phases_count(req->req.stream[0]) + phases_count(req->req.stream[1]);
-				int ds = diffs[phases_count(req->req.stream[0])] + diffs[phases_count(req->req.stream[1])]; 
+				emd_log(LOG_DEBUG, "phs: %d ds: %d", phs, ds);
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_ui)*phs + sizeof(calc_ui_diff)*ds;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
