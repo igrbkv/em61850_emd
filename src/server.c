@@ -23,7 +23,6 @@ int correct_time = 1; // Время усанавливается по планш
 static void make_err_resp(int8_t code, uint8_t err, void **msg, int *len);
 static void apply_time(int32_t client_time);
 static void set_network(const network *net);
-static int phases_count(uint8_t stream);
 
 void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 {
@@ -36,19 +35,6 @@ void make_err_resp(int8_t code, uint8_t err, void **msg, int *len)
 	*msg = resp;
 	*len = sz;
 }
-
-int phases_count(uint8_t stream)
-{
-	int ret = 0;
-	for (int i = 0; i < PHASES_IN_STREAM; i++) {
-		uint8_t bit = 0x1 << i;
-		if (stream & bit)
-			ret++;
-	}
-	return ret;
-}
-
-
 
 // confirmation = empty msg
 void make_confirmation(uint8_t code, void **msg, int *len)
@@ -148,9 +134,9 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			pdu_t *resp = malloc(len);
 			resp->msg_code = hdr->msg_code;
 			resp->len = len;
-			streams_prop_resp *data = (streams_prop_resp *)resp->data;
+			streams_prop_resp *spr = (streams_prop_resp *)resp->data;
 
-			memcpy(data, &streams_prop, sizeof(streams_prop_resp));
+			memcpy(spr, &streams_prop, sizeof(streams_prop_resp));
 			*out = (void *)resp;
 			*out_len = len;
 			break;
@@ -160,8 +146,8 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				emd_log(LOG_DEBUG, "SET_STREAMS_PROP_REQ error data size!");
 				return -1;
 			}
-			streams_prop_resp *data = (streams_prop_resp *)hdr->data;
-			if (set_streams_prop(data) == -1)
+			streams_prop_resp *spr = (streams_prop_resp *)hdr->data;
+			if (set_streams_prop(spr) == -1)
 				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
 			else {
 				make_confirmation(hdr->msg_code, out, out_len);

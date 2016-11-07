@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
+#include <netinet/ether.h>
 
 /* Протокол обмена.
  * 1. Формат пакета:
@@ -19,12 +20,14 @@
 #define VERSION_MAX_LEN 24
 
 enum REQ_CODES {
-	STATE_REQ = 1,
+	GET_PROTO_VERSION = 1,
+	STATE_REQ,
 	SET_TIME_REQ,
 	GET_ADC_PROP_REQ,
 	SET_ADC_PROP_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
+	GET_STREAMS_LIST_REQ,
 	GET_SYNC_PROP_REQ,
 	SET_SYNC_PROP_REQ,
 	GET_VERSION_REQ,
@@ -82,30 +85,30 @@ struct __attribute__((__packed__)) adc_properties {
 		};
 		uint8_t range[8]; // enum U_RANGE or I_RANGE
 	};
-	char src_mac[17];
-	char dst_mac[17];
+	struct ether_addr src_mac;
+	struct ether_addr dst_mac;
 	uint8_t rate;	// enum SV_DISCRETE 
 	char sv_id[SV_ID_MAX_LEN];
 };
 
 typedef struct adc_properties adc_prop_resp;
 
+typedef struct __attribute__((__packed__)) stream_property {
+	struct ether_addr src_mac;
+	struct ether_addr dst_mac;
+	char sv_id[SV_ID_MAX_LEN];
+} stream_property;
+
 struct __attribute__((__packed__)) streams_properties {
-	uint8_t stream1;
-	char src_mac1[17];
-	char dst_mac1[17];
-	char sv_id1[SV_ID_MAX_LEN];
-	uint32_t u_trans_coef1; 
-	uint32_t i_trans_coef1; 
-	uint8_t stream2;
-	char src_mac2[17];
-	char dst_mac2[17];
-	char sv_id2[SV_ID_MAX_LEN];
-	uint32_t u_trans_coef2; 
-	uint32_t i_trans_coef2; 
+	stream_property data[2];
 };
 
 typedef struct streams_properties streams_prop_resp;
+
+typedef struct __attribute__((__packed__)) {
+	int count;
+	stream_property data[];
+} streams_list;
 
 struct __attribute__((__packed__)) output_properties {
 	uint8_t mode;

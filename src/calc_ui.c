@@ -73,7 +73,6 @@ int make_calc_ui(calc_multimeter_req *cmr, calc_ui *cui, int *cui_sz, calc_ui_di
 
 void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui *cui, int *cui_sz)
 {
-	int count = 0;
 	calc_stream *stm = stream[stm_idx];
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {
@@ -109,7 +108,6 @@ void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui *cui, int *cui_sz)
 void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff *cui_diff, int *cui_diff_sz)
 {
 	// только напряжение
-	int count = 0;
 	phases_mask &= U_MASK;
 	calc_stream *stm = stream[stm_idx];
 	for (int p = PHASES_IN_STREAM/2; p < PHASES_IN_STREAM; p++) {

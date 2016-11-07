@@ -176,7 +176,7 @@ int sv_read_init()
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 500000; // 1/2 second
 	err_threshold.tv_sec = 0;
-	err_threshold.tv_usec = 100000; // 100 ms
+	err_threshold.tv_usec = 300000; // 300 ms
 #ifdef LOCAL_DEBUG
 	buffer_size = BUFFER_INCREMENT;
 	buffer = (char *)malloc(buffer_size);
@@ -244,56 +244,38 @@ int read_start()
 	}
 
 	char *filter = NULL;
-	char dst_mac1[17+1] = {0}, dst_mac2[17+1] = {0};
-	char src_mac1[17+1] = {0}, src_mac2[17+1] = {0};
+	char dst_mac1[32] = {0}, dst_mac2[32] = {0};
+	char src_mac1[32] = {0}, src_mac2[32] = {0};
 	char *fmt[] = {
-		"ether multicast and (vlan or ether proto 35002) and ether dst %s",
 		"ether multicast and (vlan or ether proto 35002) and ether dst %s and ether src %s",
-		"ether multicast and (vlan or ether proto 35002) and ether dst %s and (ether src %s or ether src %s)",
-		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s)",
-		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s) and ether src %s",
-		"ether multicast and (vlan or ether proto 35002) and (ether dst %s or ether dst %s) and (ether src %s or ether src %s)"
+		"ether multicast and (vlan or ether proto 35002) and ((ether dst %s and ether src %s) or (ether dst %s and ether src %s))"
 	};
-	if (streams_prop.stream1 == 0) {
-		strncpy(src_mac1, adc_prop.src_mac, 17);
-		strncpy(dst_mac1, adc_prop.dst_mac, 17);
+	if (!streams_prop[0].sv_id[0]) {
+		strncpy(src_mac1, ether_ntoa(&adc_prop.src_mac), 17);
+		strncpy(dst_mac1, ether_ntoa(&adc_prop.dst_mac), 17);
 		sv_id[0] = strdup(adc_prop.sv_id);
 	}
 	else {
-		sv_id[0] = strdup(streams_prop.sv_id1);
-		strncpy(dst_mac1, streams_prop.dst_mac1, 17);
-		if (streams_prop.src_mac1[0] != '\0')
-			strncpy(src_mac1, streams_prop.src_mac1, 17);
+		sv_id[0] = strdup(streams_prop[0].sv_id);
+		strcpy(dst_mac1, ether_ntoa(&streams_prop[0].dst_mac));
+		strcpy(src_mac1, ether_ntoa(&streams_prop[0].src_mac));
 	}
 
-	if (streams_prop.stream2 == 1) {
-		sv_id[1] = strdup(streams_prop.sv_id2);
-		strncpy(dst_mac2, streams_prop.dst_mac2, 17);
-		if (streams_prop.src_mac2[0] != '\0')
-			strncpy(src_mac2, streams_prop.src_mac2, 17);
+	if (streams_prop[1].sv_id[1]) {
+		sv_id[1] = strdup(streams_prop[1].sv_id);
+		strcpy(dst_mac2, ether_ntoa(&streams_prop[1].dst_mac));
+		strcpy(src_mac2, ether_ntoa(&streams_prop[1].src_mac));
 	}
 
 	if (strcasecmp(dst_mac1, dst_mac2) == 0)
 		dst_mac2[0] = '\0';
 
-	// FIXME!!! временный костыль
-	//src_mac1[0] = src_mac2[0] = '\0';
 
 	if (dst_mac1[0] && !dst_mac2[0]) {
-		if (!src_mac1[0] && !src_mac2[0])
-			asprintf(&filter, fmt[0], dst_mac1);
-		else if (src_mac1[0] && src_mac2[0])
-			asprintf(&filter, fmt[2], dst_mac1, src_mac1, src_mac2);
-		else
-			asprintf(&filter, fmt[1], dst_mac1, src_mac1[0]? src_mac1: src_mac2);
+		asprintf(&filter, fmt[0], dst_mac1, src_mac1);
 	} else { 
 		// dst_mac1[0] && dst_mac2[0]
-		if (!src_mac1[0] && !src_mac2[0])
-			asprintf(&filter, fmt[3], dst_mac1, dst_mac2);
-		else if (src_mac1[0] && src_mac2[0])
-			asprintf(&filter, fmt[5], dst_mac1, dst_mac2, src_mac1, src_mac2);
-		else
-			asprintf(&filter, fmt[4], dst_mac1, dst_mac2, src_mac1[0]? src_mac1: src_mac2);	
+		asprintf(&filter, fmt[1], dst_mac1, src_mac1, dst_mac2, src_mac2);	
 	}
 	
 	emd_log(LOG_INFO, "Filter: %s", filter);
@@ -540,7 +522,7 @@ void cur_to_ready()
 
 int time_equal(int i1, int i2)
 {
-	struct timeval tv, err_threshold = {0, 300000};	// 300 ms
+	struct timeval tv;
 	if (timercmp(&ready[i1].ts, &ready[i2].ts, >)) {
 		timersub(&ready[i1].ts, &ready[i2].ts, &tv);
 		if (timercmp(&tv, &err_threshold, < ))

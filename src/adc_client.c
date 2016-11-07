@@ -107,7 +107,6 @@ char *print_packet(uint8_t *pack, int len)
 int set_adc_prop(struct adc_properties *prop)
 {
 	int ret;
-    char buf[32];
 
 	// write ranges
 	for (int i = 0; i < 8; i++) {
@@ -128,35 +127,27 @@ int set_adc_prop(struct adc_properties *prop)
 	}
 
 	// write macs
-	if (memcmp(adc_prop.dst_mac, prop->dst_mac, 17) != 0) {
+	if (memcmp(&adc_prop.dst_mac, &prop->dst_mac, sizeof(struct ether_addr)) != 0) {
         st.tag = 0xb4;
 		st.value[0] = 0;
-		memcpy(buf, prop->dst_mac, 17);
-		buf[17] = '\0';
-		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&st.value[1], &st.value[2], &st.value[3],
-			&st.value[4], &st.value[5], &st.value[6]);
+        memcpy(&st.value[1], &prop->dst_mac, sizeof(struct ether_addr));
         st.len = 7;
 		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01)
-			memcpy(adc_prop.dst_mac, prop->dst_mac, 17);
+			adc_prop.dst_mac = prop->dst_mac;
 		else
 			goto err;
 	}
-	if (memcmp(adc_prop.src_mac, prop->src_mac, 17) != 0) {
+	if (memcmp(&adc_prop.src_mac, &prop->src_mac, sizeof(struct ether_addr)) != 0) {
         st.tag = 0xba;
 		st.value[0] = 0;
-		memcpy(buf, prop->src_mac, 17);
-		buf[17] = '\0';
-		sscanf(buf, "%x:%x:%x:%x:%x:%x",
-			&st.value[1], &st.value[2], &st.value[3],
-			&st.value[4], &st.value[5], &st.value[6]);
+		memcpy(&st.value[1], &prop->src_mac, sizeof(struct ether_addr));
         st.len = 7;
 		if ((ret = st.send_recv(&st)) <= 0)
 			goto err1;
 		if (st.tag == 0x32 && st.value[0] == 0x01)
-			memcpy(adc_prop.src_mac, prop->src_mac, 17);
+			adc_prop.src_mac = prop->src_mac;
 		else
 			goto err;
 	}
@@ -233,10 +224,7 @@ int read_properties()
 	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x32 && st.len == 6) {
-        char buf[32];
-        snprintf(buf, sizeof(buf),  "%02X:%02X:%02X:%02X:%02X:%02X",
-                (uint8_t)st.value[0], (uint8_t)st.value[1], (uint8_t)st.value[2], (uint8_t)st.value[3], (uint8_t)st.value[4], (uint8_t)st.value[5]);
-        memcpy(adc_prop.src_mac, buf, 17);
+        memcpy(&adc_prop.src_mac, st.value, sizeof(struct ether_addr));
 	} else
         goto err;
 
@@ -246,10 +234,7 @@ int read_properties()
 	if ((ret = st.send_recv(&st)) <= 0)
         return -1;
 	if (st.tag == 0x32 && st.len == 6) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X",
-                (uint8_t)st.value[0], (uint8_t)st.value[1], (uint8_t)st.value[2], (uint8_t)st.value[3], (uint8_t)st.value[4], (uint8_t)st.value[5]);
-        memcpy(adc_prop.dst_mac, buf, 17);
+        memcpy(&adc_prop.dst_mac, st.value, sizeof(struct ether_addr));
 	} else
         goto err;
 

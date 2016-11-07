@@ -6,7 +6,7 @@ extern unsigned short emd_port;
 
 #include "proto.h"
 
-extern struct streams_properties streams_prop; 
+extern struct stream_property streams_prop[2]; 
 
 void set_default_settings();
 int emd_read_conf(const char *file);
