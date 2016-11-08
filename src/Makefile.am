@@ -19,6 +19,7 @@ emd_SOURCES = ../config.h \
 	calc_p.c \
 	calc_math.h calc_math.c \
 	settings.h settings.c \
+	streams_list.h streams_list.c \
 	proto.h
 
 AM_CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall

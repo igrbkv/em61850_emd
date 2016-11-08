@@ -24,8 +24,7 @@
 #include "log.h"
 #include "settings.h"
 #include "adc_client.h"
-
-
+#include "tcp_server.h"
 
 /* Алгоритм приема данных:
  * pdu => cur (second) => ready (2 seconds)
@@ -55,20 +54,6 @@
 #define	T_SMP_RATE 0x86
 #define	T_DATA 0x87
 
-typedef struct {
-	u_int16_t smp_cnt;
-	u_char smp_sync;
-	sv_data data;
-} asdu;
-
-typedef struct {
-	struct timeval ts;
-	int no_asdu;
-	int cur_asdu;
-	uint16_t rate;
-	asdu asdus[ASDU_MAX];
-} sv_pdu;
-
 struct _sv_header {
 	u_int16_t app_id;
 	u_int16_t len;
@@ -76,21 +61,22 @@ struct _sv_header {
 } __attribute__ ((__packed__));
 typedef struct _sv_header sv_header;
 
-static int idx;
-static sv_pdu *pdu;
-
 static void pcap_callback(u_char *useless, 
 	const struct pcap_pkthdr *pkthdr,
 	const u_char *packet);
-static int parse_tlv(const u_char *p, int *size);
+static int parse_tlv(const u_char *p, int *size, char *sv_id, int t_id);
 
-// @param sp array of stream_property's
-// @param count size of array/num elements filled
-// @return -1 - error/0 - ok
-int scan_streams(stream_property *sp, int *count)
+struct scan_result {
+	int count;
+	stream_property *sp;
+};
+
+// @param sp ptr of array of stream_property's
+// @return -1 - error/size of array
+int scan_streams(stream_property **sp)
 {
 	int ret = -1;
-	char *filter = "ether [0:4] = 0x010ccd04 and (vlan or ether proto 35002)",
+	char *filter = "ether [0:4] = 0x010ccd04 and (vlan or ether proto 35002)";
 
 	char *errbuf = (char *)malloc(PCAP_ERRBUF_SIZE);
     pcap_t *descr = pcap_open_live(emd_interface_name, BUFSIZ, 1, 1000, errbuf); 
@@ -114,12 +100,16 @@ int scan_streams(stream_property *sp, int *count)
 		goto err;
 	}
 	
-	pcap_dispatch(descr, 0/* infinity */, pcap_callback, NULL);
-	ret = 0;
+	struct scan_result sr = {0, NULL};
+	pcap_dispatch(descr, 0/* infinity */, pcap_callback, (u_char *)&sr);
+	ret = sr.count;
+	*sp = sr.sp;
 
 err:
 	if (descr)
 		pcap_close(descr);
+
+	free(errbuf);
 	return ret;
 }
 
@@ -127,10 +117,7 @@ void pcap_callback(u_char *useless,
 	const struct pcap_pkthdr *pkthdr,
 	const u_char *packet)
 {
-	st->total++;
-
 	if (pkthdr->len < sizeof(struct ether_header)) {
-		st->err_packet++;
 		return;
 	}
 
@@ -142,33 +129,35 @@ void pcap_callback(u_char *useless,
 		off = 4;
 	}
 	if (type != 0x88BA) {
-		st->err_type++;
 		return;
 	} 
 
 	sv_header *svh = (struct sv_header *)(packet + sizeof(*eh) + off);
 	if (ntohs(svh->app_id) != 0x4000) {
-		st->err_type++;
 		return;
 	}
 	int len = ntohs(svh->len);
-	
-	// в pdu индекс не меняется, потому достаточно
-	// взять первый и не сравнивать sv_id.
-	idx = -1;
 
 	len -= 4;
-	pdu->ts = pkthdr->ts;
-	// FIXME to distinguish T_NO_ASDU and T_ID
-	pdu->no_asdu = 0;
 
-	int ret = parse_tlv(packet + pkthdr->len - len, &len);
+	struct scan_result *sr = (struct scan_result *)useless;
+	for (int i = 0; i < sr->count; i++)
+		if (memcmp(&sr->sp[i].src_mac, eh->ether_shost, sizeof(struct ether_addr) == 0 || 
+			memcmp(&adc_prop.src_mac, eh->ether_shost, sizeof(struct ether_addr)) == 0))
+			return;
+
+	stream_property sp;
+	int t_id = 0;
+	int ret = parse_tlv(packet + pkthdr->len - len, &len, sp.sv_id, t_id);
 	if (ret == 0) {
-		st->sv++;
+		memcpy(&sp.src_mac, eh->ether_shost, sizeof(struct ether_addr));
+		memcpy(&sp.dst_mac, eh->ether_dhost, sizeof(struct ether_addr));
+		sr->sp = realloc(sr->sp, (sr->count+1)*sizeof(struct ether_addr));
+		sr->sp[sr->count++] = sp;
 	}
 }
 
-int parse_tlv(const u_char *p, int *size)
+int parse_tlv(const u_char *p, int *size, char *sv_id, int t_id)
 {
 	int tag = *p;
 	p++;
@@ -189,48 +178,32 @@ int parse_tlv(const u_char *p, int *size)
 	p += sz_len;
 	(*size) -= sz_len;
 	if ((*size)-len < 0) {
-		st->err_size++;
 		return -1;
 	}
 	switch (tag) {
 		case T_SAV_PDU:
 			break;
 		case T_NO_ASDU:
-			if (pdu->no_asdu == 0) {
-				pdu->no_asdu = *p;
-				// 1=>80 8=>256
-				pdu->rate = (*p == 1? 80: 256) * FREQUENCY;
+			if (t_id == 0) {
+				t_id = 1;
 			}
 			else {/* case T_ID: */
-				if (idx != -1)
-					break;
-				if (strncmp((const char *)p, sv_id[0], len) == 0)
-					idx = 0;
-				else if (strncmp((const char *)p, sv_id[1], len) == 0)
-					idx = 1;
-				else {
-					st->err_sv_id++;
-					return -1;
-				}
+				int sz =  len < SV_ID_MAX_LEN ? len: SV_ID_MAX_LEN - 1;
+				strncpy(sv_id, (const char *)p, sz);
+				sv_id[sz] = '\0';
+				return 0;
 			}
 			break;
 		case T_SEQ_ASDU:
-			pdu->cur_asdu = -1;
 			break;
 		case T_ASDU:
-			pdu->cur_asdu++;
-			return parse_tlv(p, size); 
+			return parse_tlv(p, size, sv_id, t_id); 
 		case T_SMP_CNT:
-			pdu->asdus[pdu->cur_asdu].smp_cnt = ntohs(*(u_int16_t *)p);
 			break;
 		case T_CONF_REV:
 			break;
 		case T_SMP_RATE:
 			// FIXME smp_rate must be by second, not by period
-			pdu->rate = ntohs(*(u_int16_t *)p) * FREQUENCY;
-			if (pdu->rate > RATE_MAX) {
-				return -1;
-			}
 			break;
 		case T_SMP_SYNC:
 			break;
@@ -242,7 +215,7 @@ int parse_tlv(const u_char *p, int *size)
 		(*size) -= len;
 	}
 	if (*size)
-		return parse_tlv(p, size);
+		return parse_tlv(p, size, sv_id, t_id);
 	return 0;
 }
 

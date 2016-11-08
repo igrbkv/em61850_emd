@@ -16,6 +16,7 @@
 #include "sync_client.h"
 #include "proto.h"
 #include "calc.h"
+#include "streams_list.h"
 
 #define MAX_DIFF_TIME 2
 
@@ -152,6 +153,30 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			else {
 				make_confirmation(hdr->msg_code, out, out_len);
 				read_start();
+			}
+
+			break;
+		}
+		case GET_STREAMS_LIST_REQ: {
+			if (data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_STREAMS_LIST_REQ error data size!");
+				return -1;
+			}
+			stream_property *sp;
+			int ret = scan_streams(&sp);
+			if (ret == -1)
+				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(streams_list) + sizeof(stream_property)*ret;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				streams_list *sl = (streams_list *)resp->data;
+				sl->count = ret;
+				if (ret)
+					memcpy(sl->data, sp, sizeof(stream_property)*ret);
+				*out = (void *)resp;
+				*out_len = len;
 			}
 
 			break;
