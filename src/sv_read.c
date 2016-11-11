@@ -267,11 +267,11 @@ int read_start()
 		strcpy(src_mac2, ether_ntoa(&streams_prop[1].src_mac));
 	}
 
-	if (strcasecmp(dst_mac1, dst_mac2) == 0)
-		dst_mac2[0] = '\0';
+	if (strcasecmp(src_mac1, src_mac2) == 0)
+		src_mac2[0] = '\0';
 
 
-	if (dst_mac1[0] && !dst_mac2[0]) {
+	if (src_mac1[0] && !src_mac2[0]) {
 		asprintf(&filter, fmt[0], dst_mac1, src_mac1);
 	} else { 
 		// dst_mac1[0] && dst_mac2[0]

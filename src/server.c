@@ -283,7 +283,6 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
 			else {
-				emd_log(LOG_DEBUG, "phs: %d ds: %d", phs, ds);
 				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_ui)*phs + sizeof(calc_ui_diff)*ds;
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;

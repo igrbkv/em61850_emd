@@ -136,23 +136,23 @@ void pcap_callback(u_char *useless,
 	if (ntohs(svh->app_id) != 0x4000) {
 		return;
 	}
-	int len = ntohs(svh->len);
+	int len = ntohs(svh->len) - 4;
 
-	len -= 4;
+	if (memcmp(&adc_prop.src_mac, eh->ether_shost, sizeof(struct ether_addr)) == 0)
+		return;
 
 	struct scan_result *sr = (struct scan_result *)useless;
 	for (int i = 0; i < sr->count; i++)
-		if (memcmp(&sr->sp[i].src_mac, eh->ether_shost, sizeof(struct ether_addr) == 0 || 
-			memcmp(&adc_prop.src_mac, eh->ether_shost, sizeof(struct ether_addr)) == 0))
+		if (memcmp(sr->sp[i].src_mac.ether_addr_octet, eh->ether_shost, sizeof(struct ether_addr)) == 0)
 			return;
 
 	stream_property sp;
 	int t_id = 0;
 	int ret = parse_tlv(packet + pkthdr->len - len, &len, sp.sv_id, t_id);
 	if (ret == 0) {
-		memcpy(&sp.src_mac, eh->ether_shost, sizeof(struct ether_addr));
-		memcpy(&sp.dst_mac, eh->ether_dhost, sizeof(struct ether_addr));
-		sr->sp = realloc(sr->sp, (sr->count+1)*sizeof(struct ether_addr));
+		memcpy(sp.src_mac.ether_addr_octet, eh->ether_shost, sizeof(struct ether_addr));
+		memcpy(&sp.dst_mac.ether_addr_octet, eh->ether_dhost, sizeof(struct ether_addr));
+		sr->sp = realloc(sr->sp, (sr->count+1)*sizeof(struct stream_property));
 		sr->sp[sr->count++] = sp;
 	}
 }
