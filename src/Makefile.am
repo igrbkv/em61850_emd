@@ -16,7 +16,7 @@ emd_SOURCES = ../config.h \
 	calc_comparator.c \
 	calc_data.c \
 	calc_ui.c \
-	calc_p.c \
+	calc_p.c calc_a.c \
 	calc_math.h calc_math.c \
 	settings.h settings.c \
 	streams_list.h streams_list.c \

@@ -324,6 +324,32 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		} 
 
+		case GET_CALC_A_REQ: {
+			if (data_len != sizeof(struct calc_multimeter_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_A_REQ error data size!");
+				return -1;
+			}
+			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
+
+			struct calc_a ca[PHASES_IN_STREAM*2];
+			int ret = make_calc_a(req, ca);
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_a)*ret;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = req->req;
+				memcpy(cr->data, ca, sizeof(calc_a)*ret);
+
+				*out = (void *)resp;
+				*out_len = len;
+			}
+			break;
+		} 
+
 		case GET_VERSION_REQ: {
 			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_VERSION_REQ error data size!");

@@ -30,6 +30,8 @@ int make_comparator_calc(calc_req *req, calc_comparator *cmpr, int *cmpr_sz);
 int make_calc_ui(calc_multimeter_req *req, calc_ui *cui,int *cui_sz, calc_ui_diff *cui_diff, int *cui_diff_sz);
 int make_calc_p(calc_multimeter_req *req, calc_p *cp);
 int make_calc_data(calc_data_req *req, calc_data **data, int *data_size);
+int make_calc_a(calc_multimeter_req *cmr, calc_a *ca);
+
 void set_stream_values(int stm_idx, uint8_t phases_mask, sv_data *svd, int svd_size);
 void prepare_phases(int stm_idx, uint8_t phases_mask);
 

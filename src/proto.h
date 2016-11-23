@@ -37,6 +37,7 @@ enum REQ_CODES {
 	GET_CALC_HARMONICS_REQ,
 	GET_CALC_UI_REQ,
 	GET_CALC_P_REQ,
+	GET_CALC_A_REQ,
 };
 
 enum ERR_CODES {
@@ -208,5 +209,9 @@ typedef struct __attribute__((__packed__)) calc_p {
 	double cos_phi;
 	double sin_phi;
 } calc_p;
+
+typedef struct __attribute__((__packed__)) calc_a {
+	double angle;
+}calc_a;
 
 #endif
