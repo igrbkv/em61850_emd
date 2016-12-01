@@ -38,6 +38,11 @@ enum REQ_CODES {
 	GET_CALC_UI_REQ,
 	GET_CALC_P_REQ,
 	GET_CALC_A_REQ,
+	GET_CALIB_COEF_REQ,
+	SET_CALIB_COEF_REQ,
+	GET_CALIB_SCALE_REQ,
+	GET_CALIB_NULL_REQ,
+	GET_CALIB_ANGLE_REQ,
 };
 
 enum ERR_CODES {
@@ -193,9 +198,11 @@ typedef struct __attribute__((__packed__)) calc_ui {
 	double mid;
 } calc_ui;
 
-typedef struct __attribute__((__packed__)) calc_ui_diff {
-	double diff;
-}calc_ui_diff;
+struct __attribute__((__packed__)) dvalue {
+	double value;
+};
+
+typedef struct dvalue calc_ui_diff;
 
 typedef struct __attribute__((__packed__)) calc_p {
 	double p;
@@ -210,8 +217,15 @@ typedef struct __attribute__((__packed__)) calc_p {
 	double sin_phi;
 } calc_p;
 
-typedef struct __attribute__((__packed__)) calc_a {
-	double angle;
-}calc_a;
+typedef struct dvalue calc_a;
+
+#define SCALE_COEF 0x1
+#define NULL_COEF 0x2
+#define ANGLE_COEF 0x4
+typedef struct __attribute__((__packed__)) calib_coef {
+	int8_t phase_mask;
+	int8_t coef_mask;
+	int16_t range;  // номер предела либо -1 - все пределы
+} calib_coef;
 
 #endif

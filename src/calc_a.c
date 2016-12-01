@@ -73,7 +73,7 @@ int calc_a_stream(int stm_idx, uint8_t phases_mask, calc_a *ca)
 
 			double abs_phi = calc_abs_phi(ph->data_complex_out, t_samp, i_max, stm->counts);
 
-			_ca->angle = abs_phi;
+			_ca->value = abs_phi;
 			
 			_ca++;
 			count++;

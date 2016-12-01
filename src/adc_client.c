@@ -29,33 +29,7 @@ enum SV_DISCRETE {
 	SV_DISCRETE_1280
 };
 
-enum U_RANGE {
-	U_RANGE_1 = 0,
-	U_RANGE_2,
-	U_RANGE_5,
-	U_RANGE_10,
-	U_RANGE_30,
-	U_RANGE_60,
-	U_RANGE_120,
-	U_RANGE_240,
-	U_RANGE_480,
-	U_RANGE_800,
-	U_RANGE_INVALID
-};
-
-enum I_RANGE {
-	I_RANGE_0d1 = 0,
-	I_RANGE_0d25,
-	I_RANGE_0d5,
-	I_RANGE_1,
-	I_RANGE_2d5,
-	I_RANGE_5,
-	I_RANGE_10,
-	I_RANGE_25,
-	I_RANGE_50,
-	I_RANGE_100,
-	I_RANGE_INVALID
-};
+float adc_coefs[3][RANGE_NUM][8];
 
 char adc_version[VERSION_MAX_LEN];
 uint16_t adc_port;
@@ -275,6 +249,34 @@ int read_properties()
             *((uint32_t *)&st.value[4]));
 	else
         goto err;
+
+    // coefs
+    // 0-null 1-scale 2-phase
+    for (int i = 0; i < 3; i++)
+        for (int j = 0; j < RANGE_NUM; j++)    
+            for (int k = 0; k < 8; k++) {
+                if (i != 2) {
+                    st.tag = 0xa3;
+                    st.value[0] = 0x0;
+                    st.value[1] = i;
+                    st.value[2] = k;
+                    st.value[3] = j;
+                    st.len = 4;
+                } else {
+                    st.tag = 0xa7;
+                    st.value[0] = 0x0;
+                    st.value[1] = k;
+                    st.value[2] = j;
+                    st.len = 3;
+                }
+                if (st.send_recv(&st) <= 0)
+                    return -1;
+                if (st.tag == 0x32 && ret == 4) {
+                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                    adc_coefs[i][j][k] = *(float *)&v;
+                } else
+                    goto err;
+            }
 
 	return 0;
 err:

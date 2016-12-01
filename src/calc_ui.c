@@ -127,7 +127,7 @@ void calc_ui_diff_stream(int stm_idx, uint8_t phases_mask, calc_ui_diff *cui_dif
 					}
 					rms_wh = sqrt(rms_wh);
 
-					cui_diff[*cui_diff_sz].diff = rms_wh;
+					cui_diff[*cui_diff_sz].value = rms_wh;
 					
 					(*cui_diff_sz)++;
 				}

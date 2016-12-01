@@ -277,7 +277,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
 
 			struct calc_ui cui[PHASES_IN_STREAM*2];
-			struct calc_ui_diff cui_diff[PHASES_IN_STREAM*2];
+			calc_ui_diff cui_diff[PHASES_IN_STREAM*2];
 			int phs, ds;
 			int ret = make_calc_ui(req, cui, &phs, cui_diff, &ds);
 			if (ret < 0)
@@ -331,7 +331,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			struct calc_multimeter_req *req = (struct calc_multimeter_req *)hdr->data; 
 
-			struct calc_a ca[PHASES_IN_STREAM*2];
+			calc_a ca[PHASES_IN_STREAM*2];
 			int ret = make_calc_a(req, ca);
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
@@ -344,6 +344,26 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				cr->resp = req->req;
 				memcpy(cr->data, ca, sizeof(calc_a)*ret);
 
+				*out = (void *)resp;
+				*out_len = len;
+			}
+			break;
+		} 
+
+		case GET_CALIB_COEF_REQ: {
+			if (data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_CALIB_COEF_REQ error data size!");
+				return -1;
+			}
+
+			if (!adc_prop_valid)
+				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(adc_coefs);
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				memcpy(resp->data, adc_coefs, sizeof(adc_coefs));
 				*out = (void *)resp;
 				*out_len = len;
 			}
