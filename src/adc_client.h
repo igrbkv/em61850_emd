@@ -27,17 +27,19 @@ enum I_RANGE {
 	I_RANGE_100,
 };
 
-#define RANGE_NUM (U_RANGE_800 + 1) // or I_RANGE_100 + 1
+#define U_RANGES_COUNT (U_RANGE_800 + 1) 
+#define I_RANGES_COUNT (I_RANGE_100 + 1)
 
 int adc_client_init();
 int adc_client_close();
 
 #include "proto.h"
+#include "sv_read.h"
 
 extern char adc_version[VERSION_MAX_LEN];
 extern struct adc_properties adc_prop;
 extern int adc_prop_valid;
-extern float adc_coefs[3][RANGE_NUM][8];
+extern float adc_coefs[CALIB_TYPES_COUNT][U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
 
 int set_adc_prop(struct adc_properties *prop);
 void adc_change_network(const char *addr, const char *mask);

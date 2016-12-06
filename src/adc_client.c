@@ -29,7 +29,7 @@ enum SV_DISCRETE {
 	SV_DISCRETE_1280
 };
 
-float adc_coefs[3][RANGE_NUM][8];
+float adc_coefs[CALIB_TYPES_COUNT][U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
 
 char adc_version[VERSION_MAX_LEN];
 uint16_t adc_port;
@@ -252,9 +252,33 @@ int read_properties()
 
     // coefs
     // 0-null 1-scale 2-phase
-    for (int i = 0; i < 3; i++)
-        for (int j = 0; j < RANGE_NUM; j++)    
-            for (int k = 0; k < 8; k++) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < U_RANGES_COUNT; j++)    
+            for (int k = 0; k < 4; k++) {
+                if (i != 2) {
+                    st.tag = 0xa3;
+                    st.value[0] = 0x0;
+                    st.value[1] = i;
+                    st.value[2] = k + 4;
+                    st.value[3] = j;
+                    st.len = 4;
+                } else {
+                    st.tag = 0xa7;
+                    st.value[0] = 0x0;
+                    st.value[1] = k + 4;
+                    st.value[2] = j;
+                    st.len = 3;
+                }
+                if (st.send_recv(&st) <= 0)
+                    return -1;
+                if (st.tag == 0x32 && ret == 4) {
+                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                    adc_coefs[i][j*4 + k] = *(float *)&v;
+                } else
+                    goto err;
+            }
+        for (int j = 0; j < I_RANGES_COUNT; j++)    
+            for (int k = 0; k < 4; k++) {
                 if (i != 2) {
                     st.tag = 0xa3;
                     st.value[0] = 0x0;
@@ -273,10 +297,11 @@ int read_properties()
                     return -1;
                 if (st.tag == 0x32 && ret == 4) {
                     uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
-                    adc_coefs[i][j][k] = *(float *)&v;
+                    adc_coefs[i][j*4 + k] = *(float *)&v;
                 } else
                     goto err;
             }
+    }
 
 	return 0;
 err:

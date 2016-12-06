@@ -40,8 +40,8 @@ enum REQ_CODES {
 	GET_CALC_A_REQ,
 	GET_CALIB_COEF_REQ,
 	SET_CALIB_COEF_REQ,
-	GET_CALIB_SCALE_REQ,
 	GET_CALIB_NULL_REQ,
+	GET_CALIB_SCALE_REQ,
 	GET_CALIB_ANGLE_REQ,
 };
 
@@ -219,9 +219,13 @@ typedef struct __attribute__((__packed__)) calc_p {
 
 typedef struct dvalue calc_a;
 
-#define SCALE_COEF 0x1
-#define NULL_COEF 0x2
-#define ANGLE_COEF 0x4
+enum CALIB_TYPE {
+	CALIB_TYPE_NULL,
+	CALIB_TYPE_SCALE,
+	CALIB_TYPE_ANGLE
+};
+#define CALIB_TYPES_COUNT (CALIB_TYPE_ANGLE + 1)
+
 typedef struct __attribute__((__packed__)) calib_coef {
 	int8_t phase_mask;
 	int8_t coef_mask;
