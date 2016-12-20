@@ -36,12 +36,20 @@ int adc_client_close();
 #include "proto.h"
 #include "sv_read.h"
 
+enum CALIB_TYPE {
+	CALIB_TYPE_NULL,
+	CALIB_TYPE_SCALE,
+	CALIB_TYPE_ANGLE
+};
+#define CALIB_TYPES_COUNT (CALIB_TYPE_ANGLE + 1)
+
 extern char adc_version[VERSION_MAX_LEN];
 extern struct adc_properties adc_prop;
 extern int adc_prop_valid;
 extern float adc_coefs[CALIB_TYPES_COUNT][U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
 
 int set_adc_prop(struct adc_properties *prop);
+int set_adc_param(adc_param_req *param);
 void adc_change_network(const char *addr, const char *mask);
 
 #endif

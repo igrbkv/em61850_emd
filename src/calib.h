@@ -5,8 +5,7 @@
 #include "sv_read.h"
 #include "proto.h"
 
-#if 0
-int read_calib_coef(calib_coef* ccr, float *coefs);
-#endif
-
+int make_calib_null(calc_req *req, double *vals);
+int make_calib_scale(calc_req *req, double *vals);
+int make_calib_angle(calc_req *req, double *vals);
 #endif

@@ -25,6 +25,7 @@ enum REQ_CODES {
 	SET_TIME_REQ,
 	GET_ADC_PROP_REQ,
 	SET_ADC_PROP_REQ,
+	SET_ADC_PARAM_REQ,
 	GET_STREAMS_PROP_REQ,
 	SET_STREAMS_PROP_REQ,
 	GET_STREAMS_LIST_REQ,
@@ -98,6 +99,27 @@ struct __attribute__((__packed__)) adc_properties {
 };
 
 typedef struct adc_properties adc_prop_resp;
+
+enum ADC_PARAM_TYPE {
+	ADC_PARAM_TYPE_RANGE,
+	ADC_PARAM_TYPE_SRC_MAC,
+	ADC_PARAM_TYPE_DST_MAC,
+	ADC_PARAM_TYPE_RATE,
+	ADC_PARAM_TYPE_SV_ID,
+};
+
+typedef struct __attribute__((__packed__)) adc_param_req {
+	uint8_t type;
+	union {
+		struct {
+			uint8_t stream_mask;
+			uint8_t range;
+		};
+		struct ether_addr mac;
+		uint8_t rate;
+		char sv_id[SV_ID_MAX_LEN];
+	};
+} adc_param_req;
 
 typedef struct __attribute__((__packed__)) stream_property {
 	struct ether_addr src_mac;
@@ -218,18 +240,4 @@ typedef struct __attribute__((__packed__)) calc_p {
 } calc_p;
 
 typedef struct dvalue calc_a;
-
-enum CALIB_TYPE {
-	CALIB_TYPE_NULL,
-	CALIB_TYPE_SCALE,
-	CALIB_TYPE_ANGLE
-};
-#define CALIB_TYPES_COUNT (CALIB_TYPE_ANGLE + 1)
-
-typedef struct __attribute__((__packed__)) calib_coef {
-	int8_t phase_mask;
-	int8_t coef_mask;
-	int16_t range;  // номер предела либо -1 - все пределы
-} calib_coef;
-
 #endif

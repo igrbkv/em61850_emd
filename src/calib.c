@@ -8,16 +8,21 @@
 #include "debug.h"
 
 
-#if 0
-// @param req: req
-// @param ca: calc_a's ptr
-// @return n - num of filled structs 
-//         <0 - error
-int read_calib_coef(calib_coef *req, float *coefs)
+int make_calib_null(calc_req *req, double *vals)
 {
 
 	return 0;
 }
 
-#endif
+int make_calib_scale(calc_req *req, double *vals)
+{
+
+	return 0;
+}
+
+int make_calib_angle(calc_req *req, double *vals)
+{
+
+	return 0;
+}
 

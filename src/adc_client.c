@@ -21,6 +21,7 @@
 
 #define DEFAULT_ADC_PORT 1234
 
+#define BIT(x,i) ((x) & (0x1<<(i)))
 
 enum SV_DISCRETE {
 	SV_DISCRETE_80 = 0,
@@ -172,6 +173,107 @@ err1:
 
 }
 
+int set_adc_param(adc_param_req *param)
+{
+	int ret;
+
+    switch (param->type) {
+        case ADC_PARAM_TYPE_RANGE: {
+            for (int i = 0; i < PHASES_IN_STREAM; i++)
+                if (BIT(param->stream_mask, i) && 
+                    adc_prop.range[i] != param->range) {
+                    st.tag = 0xb0;
+                    st.value[0] = 0;
+                    st.value[1] = i;
+                    st.value[2] = param->range;
+                    st.len = 3;
+                    if ((ret = st.send_recv(&st)) <= 0)
+                        return -1;
+
+                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                        adc_prop.range[i] = param->range;
+                    else
+                        goto err;
+                }
+            break;  
+		}
+        case ADC_PARAM_TYPE_SRC_MAC: {
+            if (memcmp(&adc_prop.src_mac, &param->mac, sizeof(struct ether_addr)) != 0) {
+                st.tag = 0xba;
+                st.value[0] = 0;
+                memcpy(&st.value[1], &param->mac, sizeof(struct ether_addr));
+                st.len = 7;
+                if ((ret = st.send_recv(&st)) <= 0)
+                    goto err1;
+                if (st.tag == 0x32 && st.value[0] == 0x01)
+                    adc_prop.src_mac = param->mac;
+                else
+                    goto err;
+            }
+            break;
+        }
+        case ADC_PARAM_TYPE_DST_MAC: {
+            if (memcmp(&adc_prop.dst_mac, &param->mac, sizeof(struct ether_addr)) != 0) {
+                st.tag = 0xb4;
+                st.value[0] = 0;
+                memcpy(&st.value[1], &param->mac, sizeof(struct ether_addr));
+                st.len = 7;
+                if ((ret = st.send_recv(&st)) <= 0)
+                    goto err1;
+                if (st.tag == 0x32 && st.value[0] == 0x01)
+                    adc_prop.dst_mac = param->mac;
+                else
+                    goto err;
+            }
+            break;
+        }
+        case ADC_PARAM_TYPE_RATE: {
+            if (adc_prop.rate != param->rate) {
+                st.tag = 0xb2;
+                st.value[0] = 0;
+                st.value[1] = param->rate;
+                st.len = 2;
+                if ((ret = st.send_recv(&st)) <= 0)
+                    goto err1;
+                if (st.tag == 0x32 && st.value[0] == 0x01)
+                    adc_prop.rate = param->rate;
+                else
+                    goto err;
+            }
+            break;
+        }
+        case ADC_PARAM_TYPE_SV_ID: {
+            if (strncmp(adc_prop.sv_id, param->sv_id, SV_ID_MAX_LEN) != 0) {
+                char buf[SV_ID_MAX_LEN * 2];
+                strncpy(buf, param->sv_id, sizeof(buf));
+                buf[sizeof(buf) - 1] = '\0';
+                int len = strlen(buf);
+                make_tlv(0x31, (uint8_t *)buf, &len, sizeof(buf));
+
+                st.tag = 0xb8;
+                st.value[0] = 0;
+                // FIXME len > sizeof(re) - 1
+                memcpy(&st.value[1], buf, len);
+                st.len = len + 1;
+                if ((ret = st.send_recv(&st)) <= 0)
+                    goto err1;
+                if (st.tag == 0x32 && st.value[0] == 0x01) {
+                    strncpy(adc_prop.sv_id, param->sv_id, SV_ID_MAX_LEN);
+                    adc_prop.sv_id[SV_ID_MAX_LEN-1] = '\0';
+                } else
+                    goto err;
+            }
+            break;
+        }
+    }
+	return 0;
+
+err:
+	emd_log(LOG_DEBUG, "adc request rejected");
+err1:
+	return -1;
+}
+
 int read_properties()
 {
 	int ret;
@@ -259,30 +361,6 @@ int read_properties()
                     st.tag = 0xa3;
                     st.value[0] = 0x0;
                     st.value[1] = i;
-                    st.value[2] = k + 4;
-                    st.value[3] = j;
-                    st.len = 4;
-                } else {
-                    st.tag = 0xa7;
-                    st.value[0] = 0x0;
-                    st.value[1] = k + 4;
-                    st.value[2] = j;
-                    st.len = 3;
-                }
-                if (st.send_recv(&st) <= 0)
-                    return -1;
-                if (st.tag == 0x32 && ret == 4) {
-                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
-                    adc_coefs[i][j*4 + k] = *(float *)&v;
-                } else
-                    goto err;
-            }
-        for (int j = 0; j < I_RANGES_COUNT; j++)    
-            for (int k = 0; k < 4; k++) {
-                if (i != 2) {
-                    st.tag = 0xa3;
-                    st.value[0] = 0x0;
-                    st.value[1] = i;
                     st.value[2] = k;
                     st.value[3] = j;
                     st.len = 4;
@@ -295,9 +373,33 @@ int read_properties()
                 }
                 if (st.send_recv(&st) <= 0)
                     return -1;
-                if (st.tag == 0x32 && ret == 4) {
+                if (st.tag == 0x32 && st.len == 4) {
                     uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
                     adc_coefs[i][j*4 + k] = *(float *)&v;
+                } else
+                    goto err;
+            }
+        for (int j = 0; j < I_RANGES_COUNT; j++)    
+            for (int k = 0; k < 4; k++) {
+                if (i != 2) {
+                    st.tag = 0xa3;
+                    st.value[0] = 0x0;
+                    st.value[1] = i;
+                    st.value[2] = k + 4;
+                    st.value[3] = j;
+                    st.len = 4;
+                } else {
+                    st.tag = 0xa7;
+                    st.value[0] = 0x0;
+                    st.value[1] = k + 4;
+                    st.value[2] = j;
+                    st.len = 3;
+                }
+                if (st.send_recv(&st) <= 0)
+                    return -1;
+                if (st.tag == 0x32 && st.len == 4) {
+                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                    adc_coefs[i][U_RANGES_COUNT*4 + j*4 + k] = *(float *)&v;
                 } else
                     goto err;
             }

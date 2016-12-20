@@ -126,6 +126,21 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		}
+		case SET_ADC_PARAM_REQ: {
+			if (data_len != sizeof(adc_param_req)) {
+				emd_log(LOG_DEBUG, "SET_ADC_PARAM_REQ error data size!");
+				return -1;
+			}
+			adc_param_req *data = (adc_param_req *)hdr->data;
+			if (set_adc_param(data) == -1)
+				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
+			else {
+				make_confirmation(hdr->msg_code, out, out_len);
+				read_start();
+			}
+			break;
+		}
+
 		case GET_STREAMS_PROP_REQ: {
 			if (data_len != 0) {
 				emd_log(LOG_DEBUG, "GET_STREAMS_REQ error data size!");
@@ -213,6 +228,35 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			break;
 		}
+
+		case GET_VERSION_REQ: {
+			if (data_len != 0) {
+				emd_log(LOG_DEBUG, "GET_VERSION_REQ error data size!");
+				return -1;
+			}
+			len = sizeof(pdu_t) + sizeof(versions_resp);
+			pdu_t *resp = malloc(len);
+			resp->msg_code = hdr->msg_code;
+			resp->len = len;
+			versions_resp *data = (versions_resp *)resp->data;
+			strncpy(data->emd, VERSION, VERSION_MAX_LEN);
+			strncpy(data->adc, adc_version, VERSION_MAX_LEN);
+			strncpy(data->sync, sync_version, VERSION_MAX_LEN);
+			*out = (void *)resp;
+			*out_len = len;
+			break;
+		}
+
+		case SET_NETWORK_REQ: {
+			if (data_len != sizeof(network)) {
+				emd_log(LOG_DEBUG, "SET_NETWORK_REQ error data size!");
+				return -1;
+			}
+			set_network((network *)hdr->data);
+			make_confirmation(hdr->msg_code, out, out_len);
+			break;
+		}
+
 		case GET_CALC_DATA_REQ: {
 			if (data_len != sizeof(struct calc_data_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_DATA_REQ error data size!");
@@ -370,32 +414,39 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		} 
 
-		case GET_VERSION_REQ: {
-			if (data_len != 0) {
-				emd_log(LOG_DEBUG, "GET_VERSION_REQ error data size!");
+		case GET_CALIB_NULL_REQ: case GET_CALIB_SCALE_REQ: case GET_CALIB_ANGLE_REQ: {
+			if (data_len != sizeof(struct calc_req)) {
+				emd_log(LOG_DEBUG, "GET_CALIB_XXX_REQ error data size!");
 				return -1;
 			}
-			len = sizeof(pdu_t) + sizeof(versions_resp);
-			pdu_t *resp = malloc(len);
-			resp->msg_code = hdr->msg_code;
-			resp->len = len;
-			versions_resp *data = (versions_resp *)resp->data;
-			strncpy(data->emd, VERSION, VERSION_MAX_LEN);
-			strncpy(data->adc, adc_version, VERSION_MAX_LEN);
-			strncpy(data->sync, sync_version, VERSION_MAX_LEN);
-			*out = (void *)resp;
-			*out_len = len;
-			break;
-		}
-		case SET_NETWORK_REQ: {
-			if (data_len != sizeof(network)) {
-				emd_log(LOG_DEBUG, "SET_NETWORK_REQ error data size!");
-				return -1;
+			struct calc_req *req = (struct calc_req *)hdr->data; 
+
+			dvalue vals[PHASES_IN_STREAM];
+			int ret;
+			if (hdr->msg_code == GET_CALIB_NULL_REQ)
+				ret = make_calib_null(req, vals);
+			else (hdr->msg_code == GET_CALIB_SCALE_REQ)
+				ret = make_calib_scale(req, vals);
+			else (hdr->msg_code == GET_CALIB_ANGLE_REQ)
+				ret = make_calib_angle(req, vals);
+
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sizeof(calc_a)*ret;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = req->req;
+				memcpy(cr->data, ca, sizeof(calc_a)*ret);
+
+				*out = (void *)resp;
+				*out_len = len;
 			}
-			set_network((network *)hdr->data);
-			make_confirmation(hdr->msg_code, out, out_len);
 			break;
-		}
+		} 
+
 
 		default:
 			return -1;
