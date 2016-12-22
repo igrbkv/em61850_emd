@@ -21,7 +21,6 @@
 
 #define DEFAULT_ADC_PORT 1234
 
-#define BIT(x,i) ((x) & (0x1<<(i)))
 
 enum SV_DISCRETE {
 	SV_DISCRETE_80 = 0,

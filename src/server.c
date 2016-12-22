@@ -17,6 +17,7 @@
 #include "proto.h"
 #include "calc.h"
 #include "streams_list.h"
+#include "calib.h"
 
 #define MAX_DIFF_TIME 2
 
@@ -136,7 +137,13 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
 			else {
 				make_confirmation(hdr->msg_code, out, out_len);
-				read_start();
+				switch (data->type) {
+					case ADC_PARAM_TYPE_SRC_MAC:
+					case ADC_PARAM_TYPE_DST_MAC:
+					case ADC_PARAM_TYPE_SV_ID:
+						read_start();
+						break;
+				}
 			}
 			break;
 		}
@@ -421,14 +428,16 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			}
 			struct calc_req *req = (struct calc_req *)hdr->data; 
 
-			dvalue vals[PHASES_IN_STREAM];
+			struct dvalue vals[PHASES_IN_STREAM];
 			int ret;
 			if (hdr->msg_code == GET_CALIB_NULL_REQ)
 				ret = make_calib_null(req, vals);
-			else (hdr->msg_code == GET_CALIB_SCALE_REQ)
+			else if (hdr->msg_code == GET_CALIB_SCALE_REQ)
 				ret = make_calib_scale(req, vals);
-			else (hdr->msg_code == GET_CALIB_ANGLE_REQ)
+			else if (hdr->msg_code == GET_CALIB_ANGLE_REQ)
 				ret = make_calib_angle(req, vals);
+			else 
+				ret = -1;
 
 			if (ret < 0)
 				make_err_resp(hdr->msg_code, -ret, out, out_len);
@@ -438,8 +447,8 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
 				struct calc_resp *cr = (struct calc_resp *)resp->data;
-				cr->resp = req->req;
-				memcpy(cr->data, ca, sizeof(calc_a)*ret);
+				cr->resp = *req;
+				memcpy(cr->data, vals, sizeof(struct dvalue)*ret);
 
 				*out = (void *)resp;
 				*out_len = len;

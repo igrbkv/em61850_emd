@@ -1,6 +1,8 @@
 #ifndef ADC_CLIENT_H_
 #define ADC_CLIENT_H_
 
+#define BIT(x,i) ((x) & (0x1<<(i)))
+
 enum U_RANGE {
 	U_RANGE_1 = 0,
 	U_RANGE_2,
