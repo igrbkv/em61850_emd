@@ -1,7 +1,6 @@
 #ifndef ADC_CLIENT_H_
 #define ADC_CLIENT_H_
 
-#define BIT(x,i) ((x) & (0x1<<(i)))
 
 enum U_RANGE {
 	U_RANGE_1 = 0,
@@ -36,19 +35,19 @@ int adc_client_init();
 int adc_client_close();
 
 #include "proto.h"
-#include "sv_read.h"
 
-enum CALIB_TYPE {
-	CALIB_TYPE_NULL,
-	CALIB_TYPE_SCALE,
-	CALIB_TYPE_ANGLE
+#define BIT(x,i) ((x) & (0x1<<(i)))
+
+struct __attribute__((__packed__)) adc_corrections {
+    int null[U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
+    float scale[U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
+    float shift[U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
 };
-#define CALIB_TYPES_COUNT (CALIB_TYPE_ANGLE + 1)
 
 extern char adc_version[VERSION_MAX_LEN];
 extern struct adc_properties adc_prop;
 extern int adc_prop_valid;
-extern float adc_coefs[CALIB_TYPES_COUNT][U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
+extern struct adc_corrections adc_corrs;
 
 int set_adc_prop(struct adc_properties *prop);
 int set_adc_param(adc_param_req *param);

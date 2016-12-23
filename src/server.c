@@ -141,6 +141,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 					case ADC_PARAM_TYPE_SRC_MAC:
 					case ADC_PARAM_TYPE_DST_MAC:
 					case ADC_PARAM_TYPE_SV_ID:
+						// pcap restart
 						read_start();
 						break;
 				}
@@ -410,11 +411,11 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			if (!adc_prop_valid)
 				make_err_resp(hdr->msg_code, ERR_NOT_AVAILABLE, out, out_len);
 			else {
-				len = sizeof(pdu_t) + sizeof(adc_coefs);
+				len = sizeof(pdu_t) + sizeof(adc_corrs);
 				pdu_t *resp = malloc(len);
 				resp->msg_code = hdr->msg_code;
 				resp->len = len;
-				memcpy(resp->data, adc_coefs, sizeof(adc_coefs));
+				memcpy(resp->data, &adc_corrs, sizeof(adc_corrs));
 				*out = (void *)resp;
 				*out_len = len;
 			}

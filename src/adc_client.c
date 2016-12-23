@@ -21,6 +21,8 @@
 
 #define DEFAULT_ADC_PORT 1234
 
+#define ADC_IDX(x) ((i+PHASES_IN_STREAM/2)%PHASES_IN_STREAM)
+#define ARR_IDX(range, signal) (U_RANGES_COUNT*(PHASES_IN_STREAM/2)*((signal)/(PHASES_IN_STREAM/2)) + (range)*PHASES_IN_STREAM/2 + (signal)%(PHASES_IN_STREAM/2))
 
 enum SV_DISCRETE {
 	SV_DISCRETE_80 = 0,
@@ -29,7 +31,7 @@ enum SV_DISCRETE {
 	SV_DISCRETE_1280
 };
 
-float adc_coefs[CALIB_TYPES_COUNT][U_RANGES_COUNT*PHASES_IN_STREAM/2+I_RANGES_COUNT*PHASES_IN_STREAM/2];
+struct adc_corrections adc_corrs;
 
 char adc_version[VERSION_MAX_LEN];
 uint16_t adc_port;
@@ -264,6 +266,72 @@ int set_adc_param(adc_param_req *param)
             }
             break;
         }
+        case ADC_PARAM_TYPE_CALIB_NULL: {
+            for (int i = 0; i < PHASES_IN_STREAM; i++)
+                if (BIT(param->stream_mask, i)) {
+                    st.tag = 0xA2;
+                    st.value[0] = 0;
+                    st.value[1] = 0;
+                    st.value[2] = ADC_IDX(i);
+                    st.value[3] = param->range;
+                    uint32_t v = *((uint32_t *)&param->null[i]);
+                    v = htonl(v);
+                    memcpy(&st.value[4], &v, sizeof(v));
+                    st.len = 8;
+                    if ((ret = st.send_recv(&st)) <= 0)
+                        return -1;
+
+                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                        adc_corrs.null[ARR_IDX(param->range, ADC_IDX(i))] = param->null[i];
+                    else
+                        goto err;
+                }
+            break;  
+		}
+        case ADC_PARAM_TYPE_CALIB_SCALE: {
+            for (int i = 0; i < PHASES_IN_STREAM; i++)
+                if (BIT(param->stream_mask, i)) {
+                    st.tag = 0xA2;
+                    st.value[0] = 0;
+                    st.value[1] = 1;
+                    st.value[2] = ADC_IDX(i);
+                    st.value[3] = param->range;
+                    uint32_t v = *((uint32_t *)&param->scale[i]);
+                    v = htonl(v);
+                    memcpy(&st.value[4], &v, sizeof(v));
+                    st.len = 8;
+                    if ((ret = st.send_recv(&st)) <= 0)
+                        return -1;
+
+                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                        adc_corrs.scale[ARR_IDX(param->range, ADC_IDX(i))] = param->scale[i];
+                    else
+                        goto err;
+                }
+            break;  
+		}
+        case ADC_PARAM_TYPE_CALIB_SHIFT: {
+            for (int i = 0; i < PHASES_IN_STREAM; i++)
+                if (BIT(param->stream_mask, i)) {
+                    st.tag = 0xA6;
+                    st.value[0] = 0;
+                    st.value[1] = ADC_IDX(i);
+                    st.value[2] = param->range;
+                    uint32_t v = *((uint32_t *)&param->shift[i]);
+                    v = htonl(v);
+                    memcpy(&st.value[4], &v, sizeof(v));
+                    st.len = 8;
+                    if ((ret = st.send_recv(&st)) <= 0)
+                        return -1;
+
+                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                        adc_corrs.shift[ARR_IDX(param->range, ADC_IDX(i))] = param->shift[i];
+                    else
+                        goto err;
+                }
+            break;  
+		}
+
     }
 	return 0;
 
@@ -352,57 +420,105 @@ int read_properties()
         goto err;
 
     // coefs
-    // 0-null 1-scale 2-phase
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < U_RANGES_COUNT; j++)    
-            for (int k = 0; k < 4; k++) {
-                if (i != 2) {
-                    st.tag = 0xa3;
-                    st.value[0] = 0x0;
-                    st.value[1] = i;
-                    st.value[2] = k;
-                    st.value[3] = j;
-                    st.len = 4;
-                } else {
-                    st.tag = 0xa7;
-                    st.value[0] = 0x0;
-                    st.value[1] = k;
-                    st.value[2] = j;
-                    st.len = 3;
-                }
-                if (st.send_recv(&st) <= 0)
-                    return -1;
-                if (st.tag == 0x32 && st.len == 4) {
-                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
-                    adc_coefs[i][j*4 + k] = *(float *)&v;
-                } else
-                    goto err;
+    // null
+    for (int j = 0; j < U_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa3;
+            st.value[0] = 0x0;
+            st.value[1] = 0;
+            st.value[2] = k;
+            st.value[3] = j;
+            st.len = 4;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                adc_corrs.null[ARR_IDX(j, k)] = *(int *)&v;
+            } else
+                goto err;
+        }
+    for (int j = 0; j < I_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa3;
+            st.value[0] = 0x0;
+            st.value[1] = 0;
+            st.value[2] = k + 4;
+            st.value[3] = j;
+            st.len = 4;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+
+                adc_corrs.null[ARR_IDX(j, k+4)] = *(int *)&v;
             }
-        for (int j = 0; j < I_RANGES_COUNT; j++)    
-            for (int k = 0; k < 4; k++) {
-                if (i != 2) {
-                    st.tag = 0xa3;
-                    st.value[0] = 0x0;
-                    st.value[1] = i;
-                    st.value[2] = k + 4;
-                    st.value[3] = j;
-                    st.len = 4;
-                } else {
-                    st.tag = 0xa7;
-                    st.value[0] = 0x0;
-                    st.value[1] = k + 4;
-                    st.value[2] = j;
-                    st.len = 3;
-                }
-                if (st.send_recv(&st) <= 0)
-                    return -1;
-                if (st.tag == 0x32 && st.len == 4) {
-                    uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
-                    adc_coefs[i][U_RANGES_COUNT*4 + j*4 + k] = *(float *)&v;
-                } else
-                    goto err;
+        }
+
+    // scale
+    for (int j = 0; j < U_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa3;
+            st.value[0] = 0x0;
+            st.value[1] = 1;
+            st.value[2] = k;
+            st.value[3] = j;
+            st.len = 4;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                adc_corrs.scale[ARR_IDX(j, k)] = *(float *)&v;
+            } else
+                goto err;
+        }
+    for (int j = 0; j < I_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa3;
+            st.value[0] = 0x0;
+            st.value[1] = 1;
+            st.value[2] = k + 4;
+            st.value[3] = j;
+            st.len = 4;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+
+                adc_corrs.scale[ARR_IDX(j, k+4)] = *(float *)&v;
             }
-    }
+        }
+
+    // shift
+    for (int j = 0; j < U_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa7;
+            st.value[0] = 0x0;
+            st.value[1] = k;
+            st.value[2] = j;
+            st.len = 3;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                adc_corrs.shift[ARR_IDX(j, k)] = *(float *)&v;
+            } else
+                goto err;
+        }
+    for (int j = 0; j < I_RANGES_COUNT; j++)    
+        for (int k = 0; k < 4; k++) {
+            st.tag = 0xa7;
+            st.value[0] = 0x0;
+            st.value[1] = k + 4;
+            st.value[2] = j;
+            st.len = 3;
+            if (st.send_recv(&st) <= 0)
+                return -1;
+            if (st.tag == 0x32 && st.len == 4) {
+                uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                adc_corrs.shift[ARR_IDX(j, k + 4)] = *(float *)&v;
+            } else
+                goto err;
+        }
 
 	return 0;
 err:

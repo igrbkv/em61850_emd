@@ -6,6 +6,8 @@
 #include <arpa/inet.h>
 #include <netinet/ether.h>
 
+#include "sv_read.h"
+
 /* Протокол обмена.
  * 1. Формат пакета:
  *		2 байта (unsigned short) - длина данных
@@ -106,6 +108,9 @@ enum ADC_PARAM_TYPE {
 	ADC_PARAM_TYPE_DST_MAC,
 	ADC_PARAM_TYPE_RATE,
 	ADC_PARAM_TYPE_SV_ID,
+	ADC_PARAM_TYPE_CALIB_NULL,
+	ADC_PARAM_TYPE_CALIB_SCALE,
+	ADC_PARAM_TYPE_CALIB_SHIFT,
 };
 
 typedef struct __attribute__((__packed__)) adc_param_req {
@@ -114,6 +119,11 @@ typedef struct __attribute__((__packed__)) adc_param_req {
 		struct {
 			uint8_t stream_mask;
 			uint8_t range;
+			union {
+				int null[PHASES_IN_STREAM];
+				float scale[PHASES_IN_STREAM];
+				float shift[PHASES_IN_STREAM];
+			};
 		};
 		struct ether_addr mac;
 		uint8_t rate;
@@ -240,4 +250,5 @@ typedef struct __attribute__((__packed__)) calc_p {
 } calc_p;
 
 typedef struct dvalue calc_a;
+
 #endif
