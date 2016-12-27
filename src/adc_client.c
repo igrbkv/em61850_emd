@@ -185,7 +185,7 @@ int set_adc_param(adc_param_req *param)
                     adc_prop.range[i] != param->range) {
                     st.tag = 0xb0;
                     st.value[0] = 0;
-                    st.value[1] = i;
+                    st.value[1] = ADC_IDX(i);
                     st.value[2] = param->range;
                     st.len = 3;
                     if ((ret = st.send_recv(&st)) <= 0)
@@ -281,7 +281,7 @@ int set_adc_param(adc_param_req *param)
                     if ((ret = st.send_recv(&st)) <= 0)
                         return -1;
 
-                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                    if (st.tag == 0x32 && st.value[0] == 4)
                         adc_corrs.null[ARR_IDX(param->range, ADC_IDX(i))] = param->null[i];
                     else
                         goto err;
@@ -303,7 +303,7 @@ int set_adc_param(adc_param_req *param)
                     if ((ret = st.send_recv(&st)) <= 0)
                         return -1;
 
-                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                    if (st.tag == 0x32 && st.value[0] == 4)
                         adc_corrs.scale[ARR_IDX(param->range, ADC_IDX(i))] = param->scale[i];
                     else
                         goto err;
@@ -319,12 +319,12 @@ int set_adc_param(adc_param_req *param)
                     st.value[2] = param->range;
                     uint32_t v = *((uint32_t *)&param->shift[i]);
                     v = htonl(v);
-                    memcpy(&st.value[4], &v, sizeof(v));
-                    st.len = 8;
+                    memcpy(&st.value[3], &v, sizeof(v));
+                    st.len = 7;
                     if ((ret = st.send_recv(&st)) <= 0)
                         return -1;
 
-                    if (st.tag == 0x32 && st.value[0] == 0x01)
+                    if (st.tag == 0x32 && st.value[0] == 4)
                         adc_corrs.shift[ARR_IDX(param->range, ADC_IDX(i))] = param->shift[i];
                     else
                         goto err;
