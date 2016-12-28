@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <float.h>
 
 #include "emd.h"
 #include "log.h"
@@ -23,6 +24,32 @@
 
 #define ADC_IDX(x) ((i+PHASES_IN_STREAM/2)%PHASES_IN_STREAM)
 #define ARR_IDX(range, signal) (U_RANGES_COUNT*(PHASES_IN_STREAM/2)*((signal)/(PHASES_IN_STREAM/2)) + (range)*PHASES_IN_STREAM/2 + (signal)%(PHASES_IN_STREAM/2))
+
+float factory_u_scale_corrs[U_RANGES_COUNT] = {
+    2.1e-7,
+    4.2e-7,
+    1.05e-6,
+    2.1e-6,
+    6.31e-6,
+    1.26e-5,
+    2.55e-5,
+    5.1e-5,
+    1e-4,
+    2e-4
+};
+
+float factory_i_scale_corrs[I_RANGES_COUNT] = {
+    2.1e-8,
+    5.32e-8,
+    1.06e-7,
+    2.13e-7,
+    5.32e-7,
+    1.06e-6,
+    2.13e-6,
+    5.32e-6,
+    1.06e-5,
+    2.13e-5
+};
 
 enum SV_DISCRETE {
 	SV_DISCRETE_80 = 0,
@@ -467,7 +494,17 @@ int read_properties()
                 return -1;
             if (st.tag == 0x32 && st.len == 4) {
                 uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
-                adc_corrs.scale[ARR_IDX(j, k)] = *(float *)&v;
+                float fv = *(float *)&v;
+                if (fv <= FLT_MIN) {
+                    adc_param_req apr;
+                    apr.type = ADC_PARAM_TYPE_CALIB_SCALE;
+                    apr.stream_mask = 0x1<<(k+4);
+                    apr.range = j;
+                    fv = apr.scale[k+4] = factory_u_scale_corrs[j];
+                    if (set_adc_param(&apr) == -1)
+                        return -1;
+                }
+                adc_corrs.scale[ARR_IDX(j, k)] = fv;
             } else
                 goto err;
         }
@@ -483,8 +520,19 @@ int read_properties()
                 return -1;
             if (st.tag == 0x32 && st.len == 4) {
                 uint32_t v = ntohl(*(uint32_t *)&st.value[0]);
+                float fv = *(float *)&v;
+                if (fv <= FLT_MIN) {
+                    adc_param_req apr;
+                    apr.type = ADC_PARAM_TYPE_CALIB_SCALE;
+                    apr.stream_mask = 0x1<<k;
+                    apr.range = j;
+                    fv = apr.scale[k] = factory_i_scale_corrs[j];
+                    if (set_adc_param(&apr) == -1)
+                        return -1;
+                }
 
-                adc_corrs.scale[ARR_IDX(j, k+4)] = *(float *)&v;
+
+                adc_corrs.scale[ARR_IDX(j, k+4)] = fv;
             }
         }
 
