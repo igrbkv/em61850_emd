@@ -228,6 +228,7 @@ typedef struct __attribute__((__packed__)) calc_ui {
 	double rms;
 	double rms_1h;
 	double mid;
+	double thd;
 } calc_ui;
 
 struct __attribute__((__packed__)) dvalue {

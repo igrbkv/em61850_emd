@@ -94,11 +94,33 @@ void calc_ui_stream(int stm_idx, uint8_t phases_mask, calc_ui *cui, int *cui_sz)
 			// rev_win_han
 			double ar[3];
 
-			rev_win_han_scan(ph->ampl_spectre, 3, stm->counts / 2 - 1, ar, stm->counts, t_samp);
+			int i_max = rev_win_han_scan(ph->ampl_spectre, 3, stm->counts / 2 - 1, ar, stm->counts, t_samp);
+
+			ar[ 0 ] *= Kf;
+
+			int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
+			int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
+
+			double thd = 0.;
+
+			for	(int i = 2; i < max_harm; i++) {
+				int idx = stm->counts * t_samp * ar[0] * i + 0.5;
+				
+				double ar_cur[3];		
+				i_max = rev_win_han_scan(ph->ampl_spectre, idx - 1, idx + 1, ar_cur, stm->counts, t_samp);
+#if 0
+				h[i-2].f = ar_cur[0];
+				h[i-2].k = ar_cur[1];
+				h[i-2].ampl = ar_cur[2];
+#endif
+				thd += pow(ar_cur[2], 2);
+			}
+			thd = sqrt(thd) / ar[2];
 
 			cui[*cui_sz].rms = rms_wh;
 			cui[*cui_sz].rms_1h = ar[2];
 			cui[*cui_sz].mid = mean_wh;
+			cui[*cui_sz].thd = thd;
 			
 			(*cui_sz)++;
 		}
