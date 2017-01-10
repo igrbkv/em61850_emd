@@ -21,7 +21,7 @@ typedef struct calc_stream {
 } calc_stream;
 
 extern calc_stream *stream[2];
-
+extern int calc_second_divider;
 
 int calc_init();
 int calc_close();

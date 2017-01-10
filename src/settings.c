@@ -10,6 +10,7 @@
 #include "emd.h"
 #include "log.h"
 #include "settings.h"
+#include "calc.h"
 
 /* Настройки энергомонитора:
  * external_stream1 = 0 - (по умолчанию) 
@@ -99,6 +100,8 @@ int emd_read_conf(const char *file)
 			dump = atoi(val);
 		} else if (!strcasecmp(key, "correct_time")) {
 			correct_time = atoi(val);
+		} else if (!strcasecmp(key, "second_divider")) {
+			calc_second_divider = atoi(val);
 		} else if (!strcasecmp(key, "sv_id_external_stream1")) {
 			strncpy(streams_prop[0].sv_id, val, SV_ID_MAX_LEN - 1);
 			streams_prop[0].sv_id[SV_ID_MAX_LEN - 1] = '\0';

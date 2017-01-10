@@ -13,6 +13,8 @@
 #include <stdio.h>
 #endif
 
+// делитель секундного отрезка данных
+int calc_second_divider = 1;
 
 unsigned int EQ_TRAILS = 0; // На сколько уменьшать длину вектора данных чтобы учесть работу эквалайзера
 
@@ -50,8 +52,8 @@ void set_stream_values(int stm_idx, uint8_t phases_mask, sv_data *svd, int svd_s
 	calc_stream *stm = stream[stm_idx];
 	int v_size_last = stm->v_size;
 
-	stm->counts = svd_size;
-	stm->v_size = svd_size - EQ_TRAILS;
+	stm->counts = svd_size/calc_second_divider;
+	stm->v_size = stm->counts - EQ_TRAILS;
 
 	memset(stm->phases, 0, sizeof(phase)*PHASES_IN_STREAM);
 
@@ -66,7 +68,7 @@ void set_stream_values(int stm_idx, uint8_t phases_mask, sv_data *svd, int svd_s
 			phase *ph = &stm->phases[p];
 			memset(ph, 0, sizeof(phase));
 			double sf = scale_factor(p);
-			for (int i = 0; i < svd_size; i++) {
+			for (int i = 0; i < stm->counts; i++) {
 				int v = svd[i].values[p*2];
 				ph->values[i] = sf*(double)v;
 			}
