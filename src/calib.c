@@ -11,6 +11,7 @@
 
 static calc_req last_req;
 
+static int calib_null_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
 static int calib_scale_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
 static int calib_angle_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
 
@@ -40,16 +41,38 @@ int make_calib_null(calc_req *req, struct dvalue *vals)
 
 	int ps = 0;
 	for (int i = 0; i < 2; i++)
-		if (svd_size[i])
-			for (int p = 0; p < PHASES_IN_STREAM; p++)
-				if (BIT(req->stream[i], p)) {
-					double v = 0.;
-					for (int j = 0; j < svd_size[i]; j++)
-						v += svd[i][j].values[p*2];
-
-					vals[ps++].value = v/(double)svd_size[i];
-				}
+		if (svd_size[i]) {
+			set_stream_values(i, req->stream[i], svd[i], svd_size[i]);
+			prepare_phases(i, req->stream[i]);
+			ps += calib_null_stream(i, req->stream[i], &vals[ps]);
+		}
 	return ps;
+}
+
+int calib_null_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals)
+{
+	int count = 0;
+	struct dvalue *_vals = vals;
+	calc_stream *stm = stream[stm_idx];
+
+	for (int p = 0; p < PHASES_IN_STREAM; p++) {
+		if (BIT(phases_mask, p)) {
+			phase *ph = &stm->phases[p];
+			double	mean_wh = 0.0;
+
+			for (int i = 0; i < stm->v_size; i++) {
+				double val = ph->values[i];
+				double hf = stm->hanning_full[i];
+
+				mean_wh += hf * val;
+			}
+			_vals->value = mean_wh;
+			_vals++;
+			count++;
+		}
+	}
+
+	return count;
 }
 
 int make_calib_scale(calc_req *req, struct dvalue *vals)
