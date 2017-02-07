@@ -69,7 +69,7 @@ static struct sock_tlv st = {
     .init = &sock_tlv_init,
     .send_recv = &sock_tlv_send_recv,
     .close = &sock_tlv_close,
-    .timeout = 500
+    .timeout = 1000
 };
 
 
@@ -204,7 +204,6 @@ err1:
 int set_adc_param(adc_param_req *param)
 {
 	int ret;
-
     switch (param->type) {
         case ADC_PARAM_TYPE_RANGE: {
             for (int i = 0; i < PHASES_IN_STREAM; i++)
@@ -349,7 +348,7 @@ int set_adc_param(adc_param_req *param)
                     memcpy(&st.value[3], &v, sizeof(v));
                     st.len = 7;
                     if ((ret = st.send_recv(&st)) <= 0)
-                        return -1;
+                        goto err1;
 
                     if (st.tag == 0x32 && st.value[0] == 4)
                         adc_corrs.shift[ARR_IDX(param->range, ADC_IDX(i))] = param->shift[i];
