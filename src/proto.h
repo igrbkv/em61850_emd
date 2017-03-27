@@ -81,8 +81,8 @@ struct __attribute__((__packed__)) mac_resp {
 };
 
 struct __attribute__((__packed__)) adc_properties {
-	union {
-		struct {
+	union __attribute__((__packed__)) {
+		struct __attribute__((__packed__)) {
 			uint8_t ua_range;
 			uint8_t ub_range;
 			uint8_t uc_range;
@@ -115,11 +115,11 @@ enum ADC_PARAM_TYPE {
 
 typedef struct __attribute__((__packed__)) adc_param_req {
 	uint8_t type;
-	union {
-		struct {
+	union __attribute__((__packed__)) {
+		struct __attribute__((__packed__)) {
 			uint8_t stream_mask;
 			uint8_t range;
-			union {
+			union __attribute__((__packed__)) {
 				int null[PHASES_IN_STREAM];
 				float scale[PHASES_IN_STREAM];
 				float shift[PHASES_IN_STREAM];

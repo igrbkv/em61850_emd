@@ -144,7 +144,7 @@ int sock_tlv_send_recv(struct sock_tlv *st)
 				continue;
 
 			if (tag != st->tag && st->tag != 0x31 && st->tag != 0x32)
-					continue;
+				continue;
 			ret = st->len;
 
 			goto exit;

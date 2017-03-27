@@ -69,7 +69,7 @@ static struct sock_tlv st = {
     .init = &sock_tlv_init,
     .send_recv = &sock_tlv_send_recv,
     .close = &sock_tlv_close,
-    .timeout = 1000
+    .timeout = 1500
 };
 
 
