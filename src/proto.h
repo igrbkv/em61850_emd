@@ -252,4 +252,9 @@ typedef struct __attribute__((__packed__)) calc_p {
 
 typedef struct dvalue calc_a;
 
+typedef struct __attribute__((__packed__)) calib_angle {
+	double phi;
+	double freq_1h;
+} calib_angle;
+		 
 #endif

@@ -13,7 +13,7 @@ static calc_req last_req;
 
 static int calib_null_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
 static int calib_scale_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
-static int calib_angle_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals);
+static int calib_angle_stream(int stm_idx, uint8_t phases_mask, calib_angle *vals);
 
 int make_calib_null(calc_req *req, struct dvalue *vals)
 {
@@ -66,7 +66,7 @@ int calib_null_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals)
 
 				mean_wh += hf * val;
 			}
-			_vals->value = mean_wh;
+			_vals->value = mean_wh / scale_factor(p);
 			_vals++;
 			count++;
 		}
@@ -149,7 +149,7 @@ int calib_scale_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals)
 	return count;
 }
 
-int make_calib_angle(calc_req *req, struct dvalue *vals)
+int make_calib_angle(calc_req *req, calib_angle *vals)
 {
 	sv_data *svd[2];
 	int svd_size[2] = {0, 0};
@@ -184,10 +184,10 @@ int make_calib_angle(calc_req *req, struct dvalue *vals)
 	return ps;
 }
 
-int calib_angle_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals)
+int calib_angle_stream(int stm_idx, uint8_t phases_mask, calib_angle *vals)
 {
 	int count = 0;
-	struct dvalue *_vals = vals;
+	calib_angle *_vals = vals;
 	calc_stream *stm = stream[stm_idx];
 
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
@@ -202,7 +202,8 @@ int calib_angle_stream(int stm_idx, uint8_t phases_mask, struct dvalue *vals)
 
 			double abs_phi = calc_abs_phi(ph->data_complex_out, t_samp, i_max, stm->counts);
 
-			_vals->value = abs_phi;
+			_vals->phi = abs_phi;
+			_vals->freq_1h = ar[0] * Kf;
 			
 			_vals++;
 			count++;

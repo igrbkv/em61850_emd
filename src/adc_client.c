@@ -208,7 +208,7 @@ int set_adc_param(adc_param_req *param)
         case ADC_PARAM_TYPE_RANGE: {
             for (int i = 0; i < PHASES_IN_STREAM; i++)
                 if (BIT(param->stream_mask, i) && 
-                    adc_prop.range[i] != param->range) {
+                    (adc_prop.range[ADC_IDX(i)] != param->range)) {
                     st.tag = 0xb0;
                     st.value[0] = 0;
                     st.value[1] = ADC_IDX(i);
@@ -218,7 +218,7 @@ int set_adc_param(adc_param_req *param)
                         return -1;
 
                     if (st.tag == 0x32 && st.value[0] == 0x01)
-                        adc_prop.range[i] = param->range;
+                        adc_prop.range[ADC_IDX(i)] = param->range;
                     else
                         goto err;
                 }
@@ -380,9 +380,11 @@ int read_properties()
 		if ((ret = st.send_recv(&st)) <= 0)
 			return -1;
 
-		if (st.tag == 0x32 && st.len == 3)
+		if (st.tag == 0x32 && st.len == 3) {
 			adc_prop.range[i] = st.value[2];
-		else
+            if (emd_debug > 1)
+                emd_log(LOG_DEBUG, "range[%d]=%d", i, adc_prop.range[i]);
+        } else
 			goto err;
 	}
 
