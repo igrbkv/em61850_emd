@@ -321,6 +321,33 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 			break;
 		} 
 
+		case GET_CALC_HARMONICS_REQ: {
+			if (data_len != sizeof(struct calc_req)) {
+				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
+				return -1;
+			}
+			struct calc_req *req = (struct calc_req *)hdr->data; 
+	
+			char buf[PHASES_IN_STREAM*2*(sizeof(calc_harmonics) + sizeof(struct calc_harmonic)*harmonics_count)];
+			int sz;
+			int ret = make_calc_harm(req,(calc_harmonics *)buf, &sz);
+			if (ret < 0)
+				make_err_resp(hdr->msg_code, -ret, out, out_len);
+			else {
+				len = sizeof(pdu_t) + sizeof(struct calc_resp) + sz;
+				pdu_t *resp = malloc(len);
+				resp->msg_code = hdr->msg_code;
+				resp->len = len;
+				struct calc_resp *cr = (struct calc_resp *)resp->data;
+				cr->resp = *req;
+				memcpy(cr->data, buf, sz);
+
+				*out = (void *)resp;
+				*out_len = len;
+			}
+			break;
+		} 
+
 		case GET_CALC_UI_REQ: {
 			if (data_len != sizeof(struct calc_multimeter_req)) {
 				emd_log(LOG_DEBUG, "GET_CALC_UI_REQ error data size!");

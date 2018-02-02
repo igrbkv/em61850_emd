@@ -196,15 +196,14 @@ typedef struct __attribute__((__packed__)) calc_comparator {
 
 
 struct __attribute__((__packed__)) calc_harmonic {
-	double f;
-	double k;
 	double ampl;
 };
 
-struct __attribute__((__packed__)) calc_harmonics {
+typedef struct __attribute__((__packed__)) calc_harmonics {
 	uint8_t harmonics_num;
+	double f_1h;
 	struct calc_harmonic h[];
-};
+} calc_harmonics;
 
 typedef struct __attribute__((__packed__)) calc_data_req {
 	calc_req req;
