@@ -52,7 +52,7 @@ double calc_abs_phi(const double *data_complex, double t_samp, int i, int sb)
 		sigd = 1;
 
 	alp = (2 * x2 - x1) / (x2 + x1);
-	if (abs(alp) > 0.000002)
+	if (fabs(alp) > 0.000002)
 		ar[1] = M_PI * alp * (1 - pow(alp,2)) / (sin(M_PI * alp)); // коэффициент поправки 
 	else
 		ar[1] = 1;
@@ -273,7 +273,8 @@ unsigned int rev_win_han_scan(double s_buf[], unsigned int min_index, unsigned i
 	}
 
 	b = (2 * x2 - x1) / (x2 + x1);
-	if (abs(b) > 0.000002)
+
+	if (fabs(b) > 0.000002)
 		ar[1] = M_PI * b * (1 - b*b) / (sin(M_PI * b)); // коэффициент поправки 
 	else
 		ar[1] = 1;
