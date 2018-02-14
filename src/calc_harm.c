@@ -80,17 +80,18 @@ void calc_harm_stream(int stm_idx, uint8_t phases_mask, calc_harmonics *charms, 
 			int max_harm_calc = round(1.0 / ( 2 * t_samp * ar[ 0 ] ) - 0.5);
 			int max_harm = (max_harm_calc < harmonics_count ? max_harm_calc : harmonics_count);
 
-			ch->harmonics_num = max_harm - 2;
+			ch->harmonics_num = max_harm;
 			ch->f_1h = ar[0];
+			ch->h[0].ampl = ar[2];
 			offset += sizeof(struct calc_harmonics);
 
-			for	(int i = 2; i < max_harm; i++) {
-				int idx = stm->counts * t_samp * ar[0] * i + 0.5;
+			for	(int i = 1; i < max_harm; i++) {
+				int idx = stm->counts * t_samp * ar[0] * (i+1) + 0.5;
 				
 				double ar_cur[3];		
 				i_max = rev_win_han_scan(ph->ampl_spectre, idx - 1, idx + 1, ar_cur, stm->counts, t_samp);
 				
-				ch->h[i-2].ampl = ar_cur[2];
+				ch->h[i].ampl = ar_cur[2];
 				
 				offset += sizeof(struct calc_harmonic);
 			}

@@ -19,7 +19,7 @@ int calc_second_divider = 1;
 unsigned int EQ_TRAILS = 0; // На сколько уменьшать длину вектора данных чтобы учесть работу эквалайзера
 
 double Kf = 1.0;
-int harmonics_count = 52;
+int harmonics_count = 50;
 //static int subharmonics_count = 6;
 
 calc_stream *stream[2];

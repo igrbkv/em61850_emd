@@ -520,6 +520,26 @@ void set_network(const network *net)
 {
     char buf[INET_ADDRSTRLEN];
 
+	// udhcpd
+	// тупо посчитать [start, end]:
+	// if xxx.xxx.xxx.nnn < xxx.xxx.xxx.241
+	//	[xxx.xxx.xxx.nnn+3, xxx.xxx.xxx.nnn+3+10]
+	// else
+	//	выход без изменений
+	//
+	// FIXME сделать по маске сети
+	char start[INET_ADDRSTRLEN];
+	char end[INET_ADDRSTRLEN];
+	char *pbase = strrchr(net->addr, '.');
+	int base = atoi(++pbase);
+	if (base < 241) {
+		inc_ip4_addr(start, net->addr, 3);
+		inc_ip4_addr(end, start, 10);
+	} else {
+		emd_log(LOG_ERR, "Невозможно выделить диапазон адресов для dhcp сервера");
+		return;
+	}
+
 	// adc board
     inc_ip4_addr(buf, net->addr, 1);
 	adc_change_network(buf, net->mask);
@@ -544,26 +564,8 @@ void set_network(const network *net)
 	fflush(fp);
 	fclose(fp);
 
-	// udhcpd
-	// тупо посчитать [start, end]:
-	// if xxx.xxx.xxx.nnn < xxx.xxx.xxx.10
-	//	[xxx.xxx.xxx.nnn+3, xxx.xxx.xxx.nnn+3+10]
-	// else
-	//	[xxx.xxx.xxx.nnn-10, xxx.xxx.xxx.nnn-1]
-	// FIXME сделать по маске сети
-	char start[INET_ADDRSTRLEN];
-	char end[INET_ADDRSTRLEN];
+	// change dhcp config file
 	fn = "/etc/udhcpd.conf";
-	char *pbase = strrchr(net->addr, '.');
-	int base = atoi(++pbase);
-	if (base < 10) {
-		inc_ip4_addr(start, net->addr, 3);
-		inc_ip4_addr(end, start, 10);
-	} else {
-		inc_ip4_addr(start, net->addr, -10);
-		inc_ip4_addr(end, net->addr, -1);
-	}
-	
 	fp = fopen(fn, "w+");
 	if (!fp) {
 		// FIXME restore previos address and etc.
