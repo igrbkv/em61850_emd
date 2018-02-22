@@ -247,8 +247,8 @@ int read_start()
 	char dst_mac1[32] = {0}, dst_mac2[32] = {0};
 	char src_mac1[32] = {0}, src_mac2[32] = {0};
 	char *fmt[] = {
-		"ether multicast and (vlan or ether proto 35002) and ether dst %s and ether src %s",
-		"ether multicast and (vlan or ether proto 35002) and ((ether dst %s and ether src %s) or (ether dst %s and ether src %s))"
+		"ether multicast" /* and (vlan or ether proto 35002)*/ " and ether dst %s and ether src %s",
+		"ether multicast" /* and (vlan or ether proto 35002)*/ " and ((ether dst %s and ether src %s) or (ether dst %s and ether src %s))"
 	};
 	if (!streams_prop[0].sv_id[0]) {
 		strncpy(src_mac1, ether_ntoa(&adc_prop.src_mac), 17);
@@ -285,7 +285,7 @@ int read_start()
 	uv_thread_create(&thread, run, filter);
 	int ret;
 	if ((ret = pthread_setschedprio(thread, sched_get_priority_max(sched_getscheduler(thread)))) != 0) {
-		emd_log(LOG_ERR, "pthread_setschedprio() failed: %d", ret);
+		emd_log(LOG_DEBUG, "pthread_setschedprio() failed: %d", ret);
 	}
 #endif
 	return 0;

@@ -18,7 +18,8 @@
 #define DEFAULT_BACKLOG 128
 
 char emd_ip4_addr[INET_ADDRSTRLEN];
-char emd_interface_name[32];
+const char *emd_interface_name = "br0";
+int emd_eth_ifaces_count;
 
 typedef struct {
 	uv_write_t req;
@@ -178,30 +179,24 @@ int init_emd_ip4_addr()
 	// либо
 	// Поправить сервис net.lo
 #define MAX_ATTEMPTS 20
-	int base_iface_inited = 0;
 	for (int j = 0; j < MAX_ATTEMPTS; j++) {
 		uv_interface_addresses(&info, &count);
 		i = count;
+		emd_eth_ifaces_count = 0;
 		while (i--) {
 			uv_interface_address_t interface = info[i];
 
-			if (!interface.is_internal && 
-				interface.name[0] == 'e') {
-				if (interface.address.address4.sin_family == AF_INET)
-					uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
-				base_iface_inited = 1;
-				strcpy(emd_interface_name, interface.name);
-				break;
-			}
+			if (!interface.is_internal && interface.name[0] == 'e')
+					emd_eth_ifaces_count++;
 		}
 
 		uv_free_interface_addresses(info, count);
-		if (base_iface_inited)
-			break;
 		sleep(1);
 	}
+
 	emd_log(LOG_DEBUG, "Ethernet interface: %s", emd_interface_name);
-	if (base_iface_inited == 0) {
+
+	if (!emd_eth_ifaces_count) {
 		emd_log(LOG_ERR, "Ethernet interface not present!");
 		return -1;
 	}
@@ -214,7 +209,7 @@ int init_emd_ip4_addr()
 
 		if (!interface.is_internal && 
 			interface.address.address4.sin_family == AF_INET &&
-			(strcmp("br0", interface.name) == 0 || 
+			(strcmp(emd_interface_name, interface.name) == 0 || 
 			emd_ip4_addr[0] == '\0')) {
 			uv_ip4_name(&interface.address.address4, emd_ip4_addr, sizeof(emd_ip4_addr));
 			break;

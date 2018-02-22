@@ -51,6 +51,7 @@ void make_confirmation(uint8_t code, void **msg, int *len)
 
 int parse_request(void *in, int in_len, void **out, int *out_len)
 {
+
 	int len;
 	if (in_len < sizeof(pdu_t)) {
 		emd_log(LOG_DEBUG, "request size is too small!");
@@ -59,6 +60,10 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 	pdu_t *hdr = (pdu_t *)in;
 	int data_len = hdr->len - sizeof(pdu_t);
+
+	if (emd_debug > 0) {
+		emd_log(LOG_DEBUG, "New request packet_len: %d msg_len: %d code: %d", in_len, hdr->len, hdr->msg_code);
+	}
 
 	switch (hdr->msg_code) {
 		case SET_TIME_REQ: {
@@ -323,7 +328,7 @@ int parse_request(void *in, int in_len, void **out, int *out_len)
 
 		case GET_CALC_HARMONICS_REQ: {
 			if (data_len != sizeof(struct calc_req)) {
-				emd_log(LOG_DEBUG, "GET_CALC_REQ error data size!");
+				emd_log(LOG_DEBUG, "GET_CALC_HARMONICS_REQ error data size!");
 				return -1;
 			}
 			struct calc_req *req = (struct calc_req *)hdr->data; 
@@ -557,10 +562,18 @@ void set_network(const network *net)
 		emd_log(LOG_ERR, "open(%s) failed!: %s", fn, strerror(errno));
 		return;
 	}
-	fprintf(fp, "config_%s=\"null\"\n"
-		"bridge_br0=\"%s\"\n"
-		"config_br0=\"%s netmask %s\"",
-		emd_interface_name, emd_interface_name, net->addr, net->mask);
+
+	// 
+	for (int i = 0; i < emd_eth_ifaces_count; i++)
+		fprintf(fp,	"config_eth%d=\"null\"\n", i);
+
+	fprintf(fp,	"bridge_br0=\"");
+	for (int i = 0; i < emd_eth_ifaces_count; i++)
+		fprintf(fp,	"%seth%d", i == 0? "": " ", i);
+
+	fprintf(fp,	"\"\nconfig_br0=\"%s netmask %s\"",
+		net->addr, net->mask);
+
 	fflush(fp);
 	fclose(fp);
 

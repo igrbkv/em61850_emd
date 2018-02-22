@@ -35,3 +35,12 @@ emd_log(int level, const char *fmt, ...)
 
 	return 0;
 }
+
+void dump_buf(uint8_t *buf, int sz)
+{
+	if (emd_debug > 0) {
+		emd_log(LOG_DEBUG, "bufsize=%d", sz);
+		for (int i = 0; i < sz; i += 8)
+			emd_log(LOG_DEBUG, "0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", buf[i], buf[i+1], buf[i+2], buf[i+3], buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
+	}
+}

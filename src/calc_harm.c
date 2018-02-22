@@ -61,14 +61,14 @@ int make_calc_harm(calc_req *req, calc_harmonics *charms, int *charms_sz)
 void calc_harm_stream(int stm_idx, uint8_t phases_mask, calc_harmonics *charms, int *charms_sz)
 {
 	int offset = 0;
+	char *buf = &((char *)charms)[*charms_sz];
 	calc_stream *stm = stream[stm_idx];
+	double t_samp = 1./stm->counts;
+
 	for (int p = 0; p < PHASES_IN_STREAM; p++) {
 		if (phases_mask & (0x1<<p)) {
 			phase *ph = &stm->phases[p];
-			calc_harmonics *ch = (struct calc_harmonics *)(((void *)charms)+offset);
-
-			double t_samp = 1./stm->counts;
-
+			calc_harmonics *ch = (struct calc_harmonics *)&buf[offset];
 
 			// rev_win_han
 			double ar[3];
@@ -83,7 +83,9 @@ void calc_harm_stream(int stm_idx, uint8_t phases_mask, calc_harmonics *charms, 
 			ch->harmonics_num = max_harm;
 			ch->f_1h = ar[0];
 			ch->h[0].ampl = ar[2];
+			emd_log(LOG_DEBUG, "h_num=%d f_1h=%f ampl_0=%f", ch->harmonics_num, ch->f_1h, ch->h[0].ampl);
 			offset += sizeof(struct calc_harmonics);
+			offset += sizeof(struct calc_harmonic);
 
 			for	(int i = 1; i < max_harm; i++) {
 				int idx = stm->counts * t_samp * ar[0] * (i+1) + 0.5;

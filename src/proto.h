@@ -10,9 +10,9 @@
 
 /* Протокол обмена.
  * 1. Формат пакета:
- *		2 байта (unsigned short) - длина данных
+ *		2 байта (unsigned short) - длина пакета
  *		1 байт - код сообщения
- *		<длина_данных> байт - данные
+ *		<длина_пакета> - 3 байт - данные
  *
  *		Коды 0-127, запрос и ответ, если ошибка,
  *		то первый бит кода ответа выставить в 1
@@ -67,9 +67,7 @@ struct __attribute__((__packed__)) set_time_req {
 	int32_t time;
 };
 
-#define STREAM1_MASK 0x0f
 #define STREAM1_OK 0x01
-#define STREAM2_MASK 0xf0
 #define STREAM2_OK 0x10
 
 struct __attribute__((__packed__)) state_resp {
@@ -195,14 +193,14 @@ typedef struct __attribute__((__packed__)) calc_comparator {
 } calc_comparator;
 
 
-struct __attribute__((__packed__)) calc_harmonic {
+typedef struct __attribute__((__packed__)) calc_harmonic {
 	double ampl;
-};
+} calc_harmonic;
 
 typedef struct __attribute__((__packed__)) calc_harmonics {
 	uint8_t harmonics_num;
 	double f_1h;
-	struct calc_harmonic h[];
+	struct __attribute__((__packed__)) calc_harmonic h[];
 } calc_harmonics;
 
 typedef struct __attribute__((__packed__)) calc_data_req {
