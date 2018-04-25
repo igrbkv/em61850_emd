@@ -124,6 +124,10 @@ int emd_read_conf(const char *file)
 			struct ether_addr *mac = ether_aton(val);
 			if (mac)
 				streams_prop[1].dst_mac = *mac;
+		} else if (!strcasecmp(key, "sv_timeout_mks")) {
+			sv_timeout_mks = atoi(val);
+		} else if (!strcasecmp(key, "sv_threshold_mks")) {
+			sv_threshold_mks = atoi(val);
 		} else {
 			emd_log(LOG_WARNING,
 			    "unknown option '%s' in %s at line %d",

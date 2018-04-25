@@ -100,6 +100,10 @@ struct _sv_header {
 typedef struct _sv_header sv_header;
 
 int dump;
+
+int sv_timeout_mks = SV_TIMEOUT;
+int sv_threshold_mks = SV_THRESHOLD;
+
 static char ifname[IF_NAMESIZE];
 
 static sv_data_second *ready;
@@ -150,7 +154,8 @@ int sv_read_init()
 			emd_log(LOG_DEBUG, "found iface: %s", d->name);
 			if (d->name[0] == 'e') {
 				// вешаемся на первый попавшийся интерфейс
-				strncpy(ifname, d->name, IF_NAMESIZE-1);
+				//strncpy(ifname, d->name, IF_NAMESIZE-1);
+				strncpy(ifname, "br0", IF_NAMESIZE-1);
 				break;		
 			}
 		}
@@ -174,9 +179,9 @@ int sv_read_init()
 	pdu = (sv_pdu *)malloc(sizeof(sv_pdu)); 
 	errbuf = (char *)malloc(PCAP_ERRBUF_SIZE);
 	timeout.tv_sec = 0;
-	timeout.tv_usec = 500000; // 1/2 second
+	timeout.tv_usec = sv_timeout_mks;
 	err_threshold.tv_sec = 0;
-	err_threshold.tv_usec = 300000; // 300 ms
+	err_threshold.tv_usec = sv_threshold_mks;
 #ifdef LOCAL_DEBUG
 	buffer_size = BUFFER_INCREMENT;
 	buffer = (char *)malloc(buffer_size);
@@ -362,7 +367,9 @@ void pcap_callback(u_char *useless,
 	// взять первый и не сравнивать sv_id.
 	idx = -1;
 
-	len -= 4;
+	//len -= 4;
+	len -= sizeof(sv_header);
+
 	pdu->ts = pkthdr->ts;
 	// FIXME to distinguish T_NO_ASDU and T_ID
 	pdu->no_asdu = 0;
