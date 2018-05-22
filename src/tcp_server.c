@@ -36,6 +36,7 @@ static int init_emd_ip4_addr();
 
 void on_close(uv_handle_t* handle)
 {
+      free(handle->data);
 	  free(handle);
 }
 
@@ -43,9 +44,7 @@ void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
 {
 	buf->base = (char*) malloc(suggested_size);
 	buf->len = suggested_size;
-#ifdef DEBUG
 	emd_log(LOG_DEBUG, "alloc to read: %lu", suggested_size);
-#endif
 }
 
 void on_write(uv_write_t* req, int status) 
@@ -58,9 +57,7 @@ void on_write(uv_write_t* req, int status)
 
 	if (status == 0)
 		return;
-#ifdef DEBUG
 	emd_log(LOG_DEBUG, "uv_write error: %s", uv_strerror(status));
-#endif
 
 	if (status == UV_ECANCELED)
 		return;
@@ -76,9 +73,7 @@ void on_write(uv_write_t* req, int status)
 void on_shutdown(uv_shutdown_t* req, int status)
 {
 	if (status < 0) {
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "uv_shutdown() failed: %s", uv_strerror(status));
-#endif
 		uv_close((uv_handle_t*)req->handle, on_close);
 		free(req);
 	}
@@ -92,9 +87,8 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 	if (nread < 0) {
 		if (nread != UV_EOF)
 			emd_log(LOG_ERR, "Read error %s", uv_err_name(nread));
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "Connection %p closed: %s", stream, uv_err_name(nread));
-#endif
+
 		req = (uv_shutdown_t*) malloc(sizeof(*req));
 		uv_shutdown(req, stream, on_shutdown);
 	} else if (nread > 0) {
@@ -104,7 +98,7 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 			int out_buf_len;
 			ssize_t ret;
 
-			if ((ret = parse_request(&buf->base[offset], nread -offset,
+			if ((ret = parse_request(stream, &buf->base[offset], nread -offset,
 				(void **)&out_buf, &out_buf_len)) == -1) {
 				emd_log(LOG_ERR, "Unable to parse input message.");
 				return;
@@ -118,9 +112,7 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 		}
 	}
 	if (buf->base) {
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "free to read");
-#endif
 		free(buf->base);
 	}
 }
@@ -138,31 +130,23 @@ void on_new_connection(uv_stream_t *server, int status)
 
 	stream = malloc(sizeof(uv_tcp_t));
 
-#ifdef DEBUG
-	emd_log(LOG_DEBUG, "New connection: %p", stream);
-#endif
-
 	if ((ret = uv_tcp_init(uv_default_loop(), stream)) != 0) {
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "uv_tcp_init() failed: %s", uv_strerror(ret));
-#endif
 		free(stream);
 		return;
 	} 
 	
-	stream->data = server;
+	struct stream_data *sd = malloc(sizeof(struct stream_data));
+	init_stream_data(sd);
+	stream->data = sd;
 	
 	if ((ret = uv_accept(server, (uv_stream_t*) stream)) != 0) {
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "uv_accept() failed: %s", uv_strerror(ret));
-#endif
 		uv_close((uv_handle_t *)stream, on_close);
 		return;
 	}
 	if ((ret = uv_read_start((uv_stream_t*) stream, alloc_buffer, tcp_server_read)) != 0) {
-#ifdef DEBUG
 		emd_log(LOG_DEBUG, "uv_accept failed! %s", uv_strerror(ret));
-#endif
 		uv_close((uv_handle_t *)stream, on_close);
 	}
 }

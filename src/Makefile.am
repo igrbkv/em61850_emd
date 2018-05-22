@@ -22,6 +22,7 @@ emd_SOURCES = ../config.h \
 	calib.h calib.c \
 	settings.h settings.c \
 	streams_list.h streams_list.c \
+	upgrade.h upgrade.c \ 
 	proto.h
 
 AM_CFLAGS = -std=gnu99 -D_FILE_OFFSET_BITS=64 -Wall

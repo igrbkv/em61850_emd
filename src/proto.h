@@ -18,12 +18,15 @@
  *		то первый бит кода ответа выставить в 1
  */
 
-#define SV_ID_MAX_LEN 64
+#define PROTO_VER_MAJOR 1
+#define PROTO_VER_MINOR 0
+
+#define SV_ID_MAX_LEN 35
 #define VERSION_MAX_LEN 24
 
 enum REQ_CODES {
-	GET_PROTO_VERSION = 1,
-	STATE_REQ,
+	GET_PROTO_VER_REQ = 1,
+	GET_STATE_REQ,
 	SET_TIME_REQ,
 	GET_ADC_PROP_REQ,
 	SET_ADC_PROP_REQ,
@@ -46,11 +49,20 @@ enum REQ_CODES {
 	GET_CALIB_NULL_REQ,
 	GET_CALIB_SCALE_REQ,
 	GET_CALIB_ANGLE_REQ,
+	UPLOAD_DISTR_PART_REQ,
+	SUBMIT_PROTO_VER_REQ,
+	CHECK_PIN_CODE_REQ,
+	SET_PIN_CODE_REQ,
 };
 
 enum ERR_CODES {
 	ERR_RETRY = 2,
-	ERR_NOT_AVAILABLE
+	ERR_NOT_AVAILABLE,
+	ERR_INTERNAL,
+	ERR_FORBIDDEN,
+	ERR_PROTO_VER,
+	ERR_AUTH,
+	ERR_UNKNOWN_REQ,
 };
 
 typedef struct __attribute__((__packed__)) pdu {
@@ -61,6 +73,16 @@ typedef struct __attribute__((__packed__)) pdu {
 
 struct __attribute__((__packed__)) err_resp {
 	uint8_t err_code;
+};
+
+
+struct __attribute__((__packed__)) proto_ver {
+	uint16_t major;
+	uint16_t minor;
+};
+
+struct __attribute__((__packed__)) pin {
+	uint16_t code;
 };
 
 struct __attribute__((__packed__)) set_time_req {
@@ -96,6 +118,7 @@ struct __attribute__((__packed__)) adc_properties {
 	struct ether_addr dst_mac;
 	uint8_t rate;	// enum SV_DISCRETE 
 	char sv_id[SV_ID_MAX_LEN];
+	uint16_t vlan_id;
 };
 
 typedef struct adc_properties adc_prop_resp;
@@ -109,6 +132,7 @@ enum ADC_PARAM_TYPE {
 	ADC_PARAM_TYPE_CALIB_NULL,
 	ADC_PARAM_TYPE_CALIB_SCALE,
 	ADC_PARAM_TYPE_CALIB_SHIFT,
+	ADC_PARAM_TYPE_VLAN_ID,
 };
 
 typedef struct __attribute__((__packed__)) adc_param_req {
@@ -126,6 +150,7 @@ typedef struct __attribute__((__packed__)) adc_param_req {
 		struct ether_addr mac;
 		uint8_t rate;
 		char sv_id[SV_ID_MAX_LEN];
+		uint16_t vlan_id;
 	};
 } adc_param_req;
 
@@ -137,6 +162,8 @@ typedef struct __attribute__((__packed__)) stream_property {
 
 struct __attribute__((__packed__)) streams_properties {
 	stream_property data[2];
+	uint16_t timeout;
+	uint16_t threshold;
 };
 
 typedef struct streams_properties streams_prop_resp;
@@ -166,7 +193,7 @@ typedef struct __attribute__((__packed__)) calc_req {
 } calc_req;
 
 typedef struct __attribute__((__packed__)) versions_resp {
-	char emd[VERSION_MAX_LEN];
+	char distr[VERSION_MAX_LEN];
 	char adc[VERSION_MAX_LEN];
 	char sync[VERSION_MAX_LEN];
 } versions_resp;

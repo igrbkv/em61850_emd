@@ -191,6 +191,22 @@ int set_adc_prop(struct adc_properties *prop)
 			goto err;
 	}
 
+	// vlan id
+	if (adc_prop.vlan_id != prop->vlan_id) {
+        st.tag = 0xe2;
+		st.value[0] = 0;
+        uint16_t *vlan_id = (uint16_t *)&st.value[1];
+		*vlan_id = htons(prop->vlan_id);
+        st.len = 3;
+		if ((ret = st.send_recv(&st)) <= 0)
+			goto err1;
+		if (st.tag == 0x32 && st.value[0] == 0x01)
+			adc_prop.vlan_id = prop->vlan_id;
+		else
+			goto err;
+	}
+
+
 	adc_prop_valid = 1;
 	return 0;
 
@@ -357,7 +373,23 @@ int set_adc_param(adc_param_req *param)
                 }
             break;  
 		}
-
+        case ADC_PARAM_TYPE_VLAN_ID: {
+            if (adc_prop.vlan_id != param->vlan_id) {
+                st.tag = 0xe2;
+                st.value[0] = 0;
+                uint16_t *vlan_id = (uint16_t *)&st.value[1];
+                *vlan_id = htons(adc_prop.vlan_id);
+                st.len = 3;
+                if ((ret = st.send_recv(&st)) <= 0)
+                    goto err1;
+                if (st.tag == 0x32 && st.value[0] == 0x01)
+                    adc_prop.vlan_id = param->vlan_id;
+                else
+                    goto err;
+            }
+            break;
+        }
+ 
     }
 	return 0;
 
@@ -432,6 +464,20 @@ int read_properties()
         adc_prop.rate = st.value[1];
 	else
         goto err;
+
+	// vlan id
+    st.tag = 0xe3;
+	st.value[0] = 0;
+    st.len = 1;
+	if ((ret = st.send_recv(&st)) <= 0)
+        return -1;
+	if (st.tag == 0x32 && ret == 3) {
+        uint16_t *vlan_id = (u_int16_t *)&st.value[1];
+        adc_prop.vlan_id = ntohs(*vlan_id);
+    }
+	else
+        goto err;
+
 
     // version
     st.tag = 0xf0;

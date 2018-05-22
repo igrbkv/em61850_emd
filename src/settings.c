@@ -11,6 +11,7 @@
 #include "log.h"
 #include "settings.h"
 #include "calc.h"
+#include "proto.h"
 
 /* Настройки энергомонитора:
  * external_stream1 = 0 - (по умолчанию) 
@@ -34,6 +35,10 @@
 int dump;
 unsigned short emd_port;
 stream_property streams_prop[2]; 
+unsigned short emd_pin_code;
+
+#define VERSION_PATH "/etc/opt/EM61850/VERSION"
+static char distr_version[VERSION_MAX_LEN];
 
 void set_default_settings()
 {
@@ -124,10 +129,12 @@ int emd_read_conf(const char *file)
 			struct ether_addr *mac = ether_aton(val);
 			if (mac)
 				streams_prop[1].dst_mac = *mac;
-		} else if (!strcasecmp(key, "sv_timeout_mks")) {
-			sv_timeout_mks = atoi(val);
-		} else if (!strcasecmp(key, "sv_threshold_mks")) {
-			sv_threshold_mks = atoi(val);
+		} else if (!strcasecmp(key, "sv_timeout_ms")) {
+			sv_timeout_ms = atoi(val);
+		} else if (!strcasecmp(key, "sv_threshold_ms")) {
+			sv_threshold_ms = atoi(val);
+		} else if (!strcasecmp(key, "emd_pin_code")) {
+			emd_pin_code = atoi(val);
 		} else {
 			emd_log(LOG_WARNING,
 			    "unknown option '%s' in %s at line %d",
@@ -143,16 +150,30 @@ int emd_read_conf(const char *file)
 
 int set_streams_prop(streams_prop_resp *prop)
 {
+	char timeout_buf[16];
+	char threshold_buf[16];
+	timeout_buf[0] = threshold_buf[0] = '\0';
+	if (prop->timeout != sv_timeout_ms)
+		snprintf(timeout_buf, sizeof(timeout_buf), "%u", prop->timeout);
+	if (prop->threshold != sv_threshold_ms)
+		snprintf(threshold_buf, sizeof(threshold_buf), "%u", prop->threshold);
+
 	if(emd_update_parameter(conffile, "src_mac_external_stream1", ether_ntoa(&prop->data[0].src_mac), "=") == -1 || 
 		emd_update_parameter(conffile, "dst_mac_external_stream1", ether_ntoa(&prop->data[0].dst_mac), "=") == -1 ||
 		emd_update_parameter(conffile, "sv_id_external_stream1", prop->data[0].sv_id, "=") == -1 ||
 
 		emd_update_parameter(conffile, "src_mac_external_stream2", ether_ntoa(&prop->data[1].src_mac), "=") == -1 ||
 		emd_update_parameter(conffile, "dst_mac_external_stream2", ether_ntoa(&prop->data[1].dst_mac), "=") == -1 ||
-		emd_update_parameter(conffile, "sv_id_external_stream2", prop->data[1].sv_id, "=") == -1)
+		emd_update_parameter(conffile, "sv_id_external_stream2", prop->data[1].sv_id, "=") == -1 ||
+		emd_update_parameter(conffile, "sv_timeout_ms", timeout_buf, "=") == -1 ||
+		emd_update_parameter(conffile, "sv_threshold_ms", threshold_buf, "=") == -1)
 		return -1;
 
 	memcpy(streams_prop, prop, sizeof(stream_property)*2);
+
+	sv_timeout_ms = prop->timeout;
+	sv_threshold_ms = prop->threshold;
+
 	return 0;
 }
 
@@ -207,8 +228,8 @@ int emd_update_parameter(const char *conf_file, const char *par, const char *new
 			n = sscanf(p, scan_fmt, key, val);
 			if (n == 2 || n == 1) {
 				if (strcmp(par, key) == 0) {
-					// delete if new_value == null 
-					if(new_value) {
+					// delete if new_value == NULL or "" 
+					if(new_value && new_value[0] != '\0') {
 #ifdef USE_TMP_FILE
 						fprintf(fp_tmp, "%s%c%s\n", key, sep[0], new_value);
 #else
@@ -280,3 +301,23 @@ err:
 }
 
 
+int emd_read_distr_version()
+{
+	FILE *fp = fopen(VERSION_PATH, "r");
+	if (!fp) {
+		emd_log(LOG_ERR, "Не открыть файл %s", VERSION_PATH);
+		return -1;
+	}
+	char fmt[16];
+	sprintf(fmt, "%%%ld[^\\n]", sizeof(distr_version)-1);
+	if (fscanf(fp, fmt, distr_version) != 1) {
+		emd_log(LOG_ERR, "Ошибка разбора файла %s", VERSION_PATH);
+		return -1;
+	}
+	return 0;
+}
+
+const char *get_distr_version()
+{
+	return distr_version;
+}

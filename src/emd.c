@@ -25,6 +25,7 @@
 #include "sv_read.h"
 #include "log.h"
 #include "settings.h"
+#include "server.h"
 
 #define EMD_CONFFILE EMD_CONFPATH "/emd.conf"
 #define EMD_PIDFILE "/var/run/emd.pid" 
@@ -37,8 +38,8 @@ static void clean_exit(int sig);
 static void reload_conf(int sig);
 static int create_pidfile();
 int emd_read_conf(const char *file);
+int emd_read_distr_version();
 int check_conf();
-
 
 const char *progname;
 const char *emd_confpath = EMD_CONFPATH;
@@ -60,6 +61,9 @@ int main(int argc, char **argv)
 
 	default_init();
 	handle_cmdline(&argc, &argv);
+
+	if (emd_read_distr_version() == -1)
+		goto end;
 
 	/* read in our configuration */
 	if (emd_read_conf(conffile) == -1)
@@ -94,7 +98,7 @@ int main(int argc, char **argv)
 		sv_read_init() == -1)
 		goto  end;
 
-	emd_log(LOG_INFO, "started");		
+	emd_log(LOG_INFO, "Версия программы %s, версия протокола %s", VERSION, get_proto_ver());		
 
 	uv_run(loop, UV_RUN_DEFAULT);
 

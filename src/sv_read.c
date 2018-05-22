@@ -101,8 +101,8 @@ typedef struct _sv_header sv_header;
 
 int dump;
 
-int sv_timeout_mks = SV_TIMEOUT;
-int sv_threshold_mks = SV_THRESHOLD;
+int sv_timeout_ms = SV_TIMEOUT;
+int sv_threshold_ms = SV_THRESHOLD;
 
 static char ifname[IF_NAMESIZE];
 
@@ -178,10 +178,10 @@ int sv_read_init()
 
 	pdu = (sv_pdu *)malloc(sizeof(sv_pdu)); 
 	errbuf = (char *)malloc(PCAP_ERRBUF_SIZE);
-	timeout.tv_sec = 0;
-	timeout.tv_usec = sv_timeout_mks;
-	err_threshold.tv_sec = 0;
-	err_threshold.tv_usec = sv_threshold_mks;
+	timeout.tv_sec = sv_timeout_ms/1000;
+	timeout.tv_usec = (sv_timeout_ms%1000)*1000;
+	err_threshold.tv_sec = sv_threshold_ms/1000;
+	err_threshold.tv_usec = (sv_threshold_ms%1000)*1000;
 #ifdef LOCAL_DEBUG
 	buffer_size = BUFFER_INCREMENT;
 	buffer = (char *)malloc(buffer_size);

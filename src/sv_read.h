@@ -41,8 +41,8 @@ void stream_states(int *s1, int *s2);
 
 extern char emd_mac[17];
 
-#define SV_TIMEOUT 500000
-#define SV_THRESHOLD 300000
-extern int sv_timeout_mks;
-extern int sv_threshold_mks;
+#define SV_TIMEOUT 500
+#define SV_THRESHOLD 500
+extern int sv_timeout_ms;
+extern int sv_threshold_ms;
 #endif
