@@ -35,7 +35,7 @@ int save_distr_part(void *h, int len, void *data)
 		}
 		handle = h;
 	} else if (handle == h) {
-		if ((cur_ts - last_ts)/CLOCKS_PER_SEC < 3) {
+		if ((cur_ts - last_ts)/CLOCKS_PER_SEC > 3) {
 			emd_log(LOG_DEBUG, "Таймаут приема файла обновления");
 			goto err;
 		}

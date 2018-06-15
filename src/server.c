@@ -118,6 +118,17 @@ static int valid_proto_ver(const struct proto_ver *pv);
 void init_stream_data(struct stream_data *sd)
 {
 	sd->state = SS_INITIAL;
+	sd->fragment.buf = NULL;
+	sd->fragment.len = 0;
+}
+
+void free_stream_data(struct stream_data *sd)
+{
+	if (sd->fragment.buf) {
+		free(sd->fragment.buf);
+		sd->fragment.buf = NULL;
+		sd->fragment.len = 0;
+	}
 }
 
 const char *get_proto_ver()
@@ -159,12 +170,13 @@ int check_in(void *in, int in_len)
 {
 	if (in_len < sizeof(pdu_t)) {
 		emd_log(LOG_DEBUG, "The request size is too small!");
-		return -1;
+		return 0;
 	}
 
 	pdu_t *hdr = (pdu_t *)in;
 	if (in_len < hdr->len) {
-		emd_log(LOG_DEBUG, "The request was truncated!");
+		if (emd_debug > 1)
+			emd_log(LOG_DEBUG, "The request was truncated!");
 		return 0;
 	}
     
@@ -738,14 +750,14 @@ int get_calib_angle_req_handler(struct stream_data *sd, pdu_t *hdr, void **out, 
 
 int upload_distr_part_req_handler(struct stream_data *sd, pdu_t *hdr, void **out, int *out_len)
 {
-	IS_SS_WORK();
+	//IS_SS_WORK();
 
-	int ret = save_distr_part(hdr->len - sizeof(pdu_t), hdr->data);
+	int ret = save_distr_part(sd, hdr->len - sizeof(pdu_t), hdr->data);
 	if (ret < 0)
 		make_err_resp(hdr->msg_code, ERR_INTERNAL, out, out_len);
 	else
 		make_confirmation(hdr->msg_code, out, out_len);
-	
+
 	return hdr->len;
 }
 

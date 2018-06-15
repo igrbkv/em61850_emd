@@ -36,15 +36,17 @@ static int init_emd_ip4_addr();
 
 void on_close(uv_handle_t* handle)
 {
-      free(handle->data);
-	  free(handle);
+	free_stream_data((struct stream_data *)handle->data);
+	free(handle->data);
+	free(handle);
 }
 
 void alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
 {
 	buf->base = (char*) malloc(suggested_size);
 	buf->len = suggested_size;
-	emd_log(LOG_DEBUG, "alloc to read: %lu", suggested_size);
+	if (emd_debug > 1)
+		emd_log(LOG_DEBUG, "alloc to read: %lu", suggested_size);
 }
 
 void on_write(uv_write_t* req, int status) 
@@ -83,27 +85,48 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 {
 	write_req_t* wr;
     uv_shutdown_t* req;
+	char *ptr = NULL;
+	char *data_ptr = buf->base;
+	struct stream_data *sd = (struct stream_data *)stream->data;
 
 	if (nread < 0) {
 		if (nread != UV_EOF)
-			emd_log(LOG_ERR, "Read error %s", uv_err_name(nread));
-		emd_log(LOG_DEBUG, "Connection %p closed: %s", stream, uv_err_name(nread));
+			emd_log(LOG_WARNING, "Read error %s", uv_err_name(nread));
+		emd_log(LOG_WARNING, "Connection %p closed: %s", stream, uv_err_name(nread));
 
+err:
 		req = (uv_shutdown_t*) malloc(sizeof(*req));
 		uv_shutdown(req, stream, on_shutdown);
 	} else if (nread > 0) {
 		ssize_t offset = 0;
+		if (sd->fragment.len) {
+			sd->fragment.buf = realloc(sd->fragment.buf, nread + sd->fragment.len);
+			memcpy(&sd->fragment.buf[sd->fragment.len], buf->base, nread);
+			ptr = sd->fragment.buf;
+			data_ptr = ptr;
+			nread += sd->fragment.len;
+			sd->fragment.buf = NULL;
+			sd->fragment.len = 0;
+		}
 		while (offset < nread) {
 			char *out_buf = NULL;
 			int out_buf_len;
 			ssize_t ret;
 
-			if ((ret = parse_request(stream, &buf->base[offset], nread -offset,
+			if ((ret = parse_request(stream, &data_ptr[offset], nread -offset,
 				(void **)&out_buf, &out_buf_len)) == -1) {
 				emd_log(LOG_ERR, "Unable to parse input message.");
-				return;
+				goto err;
 			}
-			
+
+			if (ret == 0) {
+				// packet fragmented
+				sd->fragment.buf = malloc(nread - offset);
+				memcpy(sd->fragment.buf, &data_ptr[offset], nread - offset);
+				sd->fragment.len = nread - offset;
+
+				break;
+			}
 			wr = (write_req_t*) malloc(sizeof(*wr));
 			wr->buf = uv_buf_init(out_buf,out_buf_len);
 			uv_write(&wr->req, stream, &wr->buf, 1, on_write);
@@ -111,8 +134,11 @@ void tcp_server_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf)
 			offset += ret;
 		}
 	}
+	if (ptr)
+		free(ptr);
 	if (buf->base) {
-		emd_log(LOG_DEBUG, "free to read");
+		if (emd_debug > 1)
+			emd_log(LOG_DEBUG, "free to read");
 		free(buf->base);
 	}
 }
